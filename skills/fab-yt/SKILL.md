@@ -1,6 +1,6 @@
 ---
 name: fab-yt
-description: Extract claims from YouTube videos, verify them, and report findings. Trigger: /fab-yt <youtube-link>
+description: "Extract claims from YouTube videos, verify them, and report findings. Trigger: /fab-yt <youtube-link>"
 ---
 
 # /fab-yt — YouTube → Fabric → Verified Claims
