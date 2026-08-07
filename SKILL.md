@@ -12,6 +12,7 @@ verify each claim with web research, and report surviving claims.
 
 - `fabric` CLI: `~/.local/bin/fabric` (or on PATH)
 - `yt-dlp`, `youtube-transcript-api`: auto-installed if missing
+- Playwright + Chromium: auto-installed if needed (tertiary fallback; skip with `SKIP_PLAYWRIGHT=1`)
 - A browser with YouTube login: yt-dlp auto-detects Chrome/Firefox/Brave/Edge/Opera cookies on all platforms. No manual cookie export.
 
 ## Full Pipeline
@@ -30,6 +31,7 @@ The script writes `OUTDIR` to stdout on the last line. Capture it.
 1. Extract transcript → transcript.md
    - youtube-transcript-api (fast, no cookies, works on residential IPs)
    - fallback: yt-dlp with browser cookies (auto-detects Chrome/Firefox/Brave/Edge/Opera)
+   - fallback: Playwright headless Chromium (anti-detection, works on blocked VPS IPs, auto-installs)
    - fallback: prompt user to install Firefox + log into YouTube
 2. Run 3 fabric patterns: extract_wisdom, extract_insights, extract_instructions
 3. Output: transcript.md, extract_wisdom.md, extract_insights.md, extract_instructions.md
@@ -138,6 +140,6 @@ Write `verification.md` with all results, grouped by status:
 |---------|--------|
 | `fab-yt.sh` not found | Clone the repo, ensure `chmod +x fab-yt.sh` |
 | `fabric` not found | Install: `pip install fabric-ai` or check PATH |
-| Transcript blocked | Script auto-detects browser cookies. If none found, guides user to install Firefox + log into YouTube. |
+| Transcript blocked | Script tries: 1) youtube-transcript-api, 2) yt-dlp with browser cookies, 3) Playwright headless (auto-installs ~500MB Chromium). Set `SKIP_PLAYWRIGHT=1` to skip the Playwright fallback. |
 | Fabric pattern fails | Write a placeholder note in the output file |
 | 0 claims survive | Report honestly — the video may not contain verifiable facts |

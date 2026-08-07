@@ -75,7 +75,127 @@ get_transcript_ytdlp() {
     rm -f "$vtt_file" "$OUTDIR"/raw*.vtt
 }
 
+# ─── Playwright headless Chromium (anti-detection, no login needed) ───
+# Skip with SKIP_PLAYWRIGHT=1 to avoid the ~500MB Chromium install.
+ensure_playwright() {
+    if python3 -c "import playwright" 2>/dev/null; then
+        return 0
+    fi
+    info "Installing Playwright + Chromium (one-time, ~500MB)..."
+    pip install playwright --quiet 2>/dev/null || {
+        info "⚠️  pip install playwright failed. Try: pip install playwright"
+        return 1
+    }
+    python3 -m playwright install chromium --with-deps 2>/dev/null || {
+        info "⚠️  playwright install chromium failed. Try: python3 -m playwright install chromium"
+        return 1
+    }
+    info "✅ Playwright + Chromium installed."
+    return 0
+}
 
+get_transcript_playwright() {
+    # Headless Chromium → click "Show transcript" → extract text
+    python3 -c "
+from playwright.sync_api import sync_playwright
+import sys, re
+
+VIDEO_ID = '$VIDEO_ID'
+URL = f'https://www.youtube.com/watch?v={VIDEO_ID}'
+
+ANTI_DETECTION = '''
+    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+    window.chrome = { runtime: {}, loadTimes: function(){}, csi: function(){} };
+    Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+    Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+    const origQuery = window.navigator.permissions.query;
+    window.navigator.permissions.query = (params) => (
+        params.name === 'notifications' ?
+            Promise.resolve({state: Notification.permission}) :
+            origQuery(params)
+    );
+'''
+
+with sync_playwright() as p:
+    browser = p.chromium.launch(
+        headless=True,
+        args=[
+            '--disable-blink-features=AutomationControlled',
+            '--disable-features=IsolateOrigins,site-per-process',
+            '--no-sandbox', '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage', '--disable-accelerated-2d-canvas',
+            '--no-first-run', '--no-zygote', '--disable-gpu',
+            '--disable-web-security',
+        ]
+    )
+    ctx = browser.new_context(
+        viewport={'width': 1920, 'height': 1080},
+        user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
+    )
+    ctx.add_init_script(ANTI_DETECTION)
+    page = ctx.new_page()
+
+    try:
+        page.goto(URL, wait_until='domcontentloaded', timeout=30000)
+        page.wait_for_timeout(3000)
+
+        # Click 'Show transcript' — try multiple selector strategies
+        clicked = False
+        selectors = [
+            'button[aria-label*=\"Show transcript\" i]',
+            'button[aria-label*=\"Transcript\" i]',
+            'ytd-button-renderer:has-text(\"Transcript\") button',
+            '#primary-button button[aria-label*=\"transcript\" i]',
+        ]
+        for sel in selectors:
+            try:
+                btn = page.wait_for_selector(sel, timeout=5000)
+                if btn and btn.is_visible():
+                    btn.click()
+                    clicked = True
+                    break
+            except:
+                continue
+
+        if not clicked:
+            # Fallback: '...' menu → Transcript
+            try:
+                page.click('button[aria-label=\"More actions\"]', timeout=3000)
+                page.wait_for_timeout(500)
+                page.click('tp-yt-paper-item:has-text(\"Transcript\"), ytd-menu-service-item-renderer:has-text(\"Transcript\")', timeout=3000)
+                clicked = True
+            except:
+                pass
+
+        if not clicked:
+            sys.stderr.write('Playwright: transcript button not found\\n')
+            browser.close()
+            sys.exit(1)
+
+        # Wait for segments to render
+        page.wait_for_selector('ytd-transcript-segment-renderer', timeout=10000)
+        page.wait_for_timeout(1000)
+
+        segments = page.query_selector_all('ytd-transcript-segment-renderer')
+        if not segments:
+            sys.stderr.write('Playwright: no transcript segments found\\n')
+            browser.close()
+            sys.exit(1)
+
+        for seg in segments:
+            text_el = seg.query_selector('#content, .segment-text, yt-formatted-string')
+            if text_el:
+                line = text_el.inner_text().strip()
+                if line:
+                    print(line)
+
+    except Exception as e:
+        sys.stderr.write(f'Playwright error: {e}\\n')
+        sys.exit(1)
+    finally:
+        browser.close()
+" 2>/dev/null
+}
 
 # ─── cookie setup ───
 # yt-dlp --cookies-from-browser auto-detects Chrome/Firefox/Brave/Edge/Opera
@@ -125,18 +245,33 @@ TRANSCRIPT_TEXT=$(get_transcript_api) && {
     [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via youtube-transcript-api"
 } || TRANSCRIPT_TEXT=""
 
-# Attempt 2: yt-dlp with cookies
+# Attempt 2: yt-dlp with browser cookies
 if [ -z "$TRANSCRIPT_TEXT" ]; then
     info "youtube-transcript-api failed. Trying yt-dlp with cookies..."
-    setup_cookies || die "Cannot proceed without authentication. Please set up cookies."
-    TRANSCRIPT_TEXT=$(get_transcript_ytdlp) && {
-        [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via yt-dlp"
-    } || TRANSCRIPT_TEXT=""
+    if setup_cookies; then
+        TRANSCRIPT_TEXT=$(get_transcript_ytdlp) && {
+            [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via yt-dlp"
+        } || TRANSCRIPT_TEXT=""
+    else
+        info "Cookie setup failed — will try Playwright fallback."
+    fi
 fi
 
+# Attempt 3: Playwright headless Chromium (anti-detection, works on blocked IPs)
+if [ -z "$TRANSCRIPT_TEXT" ]; then
+    if [ "${SKIP_PLAYWRIGHT:-0}" = "1" ]; then
+        info "SKIP_PLAYWRIGHT=1 — skipping Playwright fallback."
+    elif ensure_playwright; then
+        info "Trying Playwright headless Chromium (anti-detection)..."
+        TRANSCRIPT_TEXT=$(get_transcript_playwright) && {
+            [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via Playwright"
+        } || TRANSCRIPT_TEXT=""
+    else
+        info "Playwright install failed — giving up."
+    fi
+fi
 
-
-[ -z "$TRANSCRIPT_TEXT" ] && die "All transcript methods failed."
+[ -z "$TRANSCRIPT_TEXT" ] && die "All transcript methods failed (API, yt-dlp, Playwright)."
 
 # ─── count speakers (crude heuristic: look for "Speaker:" or "[Name]:" patterns) ───
 SPEAKER_COUNT=$(echo "$TRANSCRIPT_TEXT" | grep -oP '^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?:' | sort -u | wc -l)

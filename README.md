@@ -10,7 +10,7 @@ Extracts transcripts from YouTube videos, runs them through [fabric](https://git
 YouTube URL
     │
     ▼
-transcript.md        ← youtube-transcript-api / yt-dlp
+transcript.md        ← youtube-transcript-api / yt-dlp / Playwright
     │
     ├── fabric extract_wisdom    → extract_wisdom.md
     ├── fabric extract_insights  → extract_insights.md
@@ -31,6 +31,7 @@ Chat report          ← Top VERIFIED / UNDECIDED / DISCARDED
 - `fabric` CLI (by [Daniel Miessler](https://github.com/danielmiessler/fabric))
 - `youtube-transcript-api` or `yt-dlp` (auto-installed if missing)
 - A browser with YouTube login (Chrome/Firefox/Brave/Edge/Opera — auto-detected)
+- Playwright + Chromium (auto-installed on first use as tertiary fallback; set `SKIP_PLAYWRIGHT=1` to skip)
 
 ## Usage
 
@@ -70,3 +71,12 @@ Chat report          ← Top VERIFIED / UNDECIDED / DISCARDED
 - **fabric** patterns by [Daniel Miessler](https://github.com/danielmiessler/fabric)
 - **yt-dlp** by the yt-dlp contributors
 - **youtube-transcript-api** by jdepoix
+- **Playwright** by Microsoft
+
+## Extraction Methods (tried in order)
+
+| # | Method | Requirements | Works on VPS? |
+|---|--------|-------------|---------------|
+| 1 | `youtube-transcript-api` | Python package | ❌ Often blocked |
+| 2 | `yt-dlp` + browser cookies | Logged-in browser | ❌ Needs display |
+| 3 | **Playwright headless** | Auto-installs Chromium (~500MB) | ✅ Yes |
