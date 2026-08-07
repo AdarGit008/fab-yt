@@ -98,7 +98,7 @@ get_transcript_playwright() {
     # Headless Chromium → click "Show transcript" → extract text
     python3 -c "
 from playwright.sync_api import sync_playwright
-import sys, re
+import sys
 
 VIDEO_ID = '$VIDEO_ID'
 URL = f'https://www.youtube.com/watch?v={VIDEO_ID}'
@@ -125,7 +125,6 @@ with sync_playwright() as p:
             '--no-sandbox', '--disable-setuid-sandbox',
             '--disable-dev-shm-usage', '--disable-accelerated-2d-canvas',
             '--no-first-run', '--no-zygote', '--disable-gpu',
-            '--disable-web-security',
         ]
     )
     ctx = browser.new_context(
@@ -154,7 +153,7 @@ with sync_playwright() as p:
                     btn.click()
                     clicked = True
                     break
-            except:
+            except Exception:
                 continue
 
         if not clicked:
@@ -164,12 +163,11 @@ with sync_playwright() as p:
                 page.wait_for_timeout(500)
                 page.click('tp-yt-paper-item:has-text(\"Transcript\"), ytd-menu-service-item-renderer:has-text(\"Transcript\")', timeout=3000)
                 clicked = True
-            except:
+            except Exception:
                 pass
 
         if not clicked:
             sys.stderr.write('Playwright: transcript button not found\\n')
-            browser.close()
             sys.exit(1)
 
         # Wait for segments to render
@@ -179,7 +177,6 @@ with sync_playwright() as p:
         segments = page.query_selector_all('ytd-transcript-segment-renderer')
         if not segments:
             sys.stderr.write('Playwright: no transcript segments found\\n')
-            browser.close()
             sys.exit(1)
 
         for seg in segments:
@@ -194,7 +191,7 @@ with sync_playwright() as p:
         sys.exit(1)
     finally:
         browser.close()
-" 2>/dev/null
+"
 }
 
 # ─── cookie setup ───
