@@ -16,6 +16,11 @@ OUTPUT_BASE="${OUTPUT_BASE:-$HOME/pi_agent/projects/pi_research}"
 die() { echo "❌ $1" >&2; exit 1; }
 info() { echo "→ $1" >&2; }
 
+# ─── preflight checks ───
+if ! command -v timeout &>/dev/null; then
+    die "'timeout' command not found. Install coreutils (apt install coreutils / brew install coreutils)"
+fi
+
 # ─── parse args ───
 TRANSCRIPT_FILE=""
 URL=""
@@ -335,8 +340,10 @@ else
             echo "**Video ID:** \`$VIDEO_ID\`"
             echo "**URL:** $URL"
             echo ""
-            echo "All extraction methods failed. Use \`fetch_content\` to extract the transcript,"
-            echo "save it to this file, then re-run:"
+            echo "All extraction methods failed."
+            echo ""
+            echo "Copy the transcript from YouTube's UI (••• → Show transcript)"
+            echo "and save it to this file, then re-run:"
             echo "\`\`\`"
             echo "./fab-yt.sh --transcript $TRANSCRIPT"
             echo "\`\`\`"
@@ -347,7 +354,8 @@ else
         echo "║  ⚠️  Transcript extraction FAILED    ║"
         echo "╠══════════════════════════════════════╣"
         echo "║  All methods failed.                 ║"
-        echo "║  Use fetch_content + --transcript     ║"
+        echo "║  Copy transcript from YouTube UI     ║"
+        echo "║  then: fab-yt.sh --transcript FILE   ║"
         echo "╠══════════════════════════════════════╣"
         echo "║  $TRANSCRIPT"
         echo "╚══════════════════════════════════════╝"
@@ -403,8 +411,8 @@ run_fabric() {
         if timeout "$timeout_sec" "$FABRIC" -p "$pattern" -o "$output" < "$TRANSCRIPT" 2>/dev/null; then
             local lines
             lines=$(wc -l < "$output")
-            if [ "$lines" -le 1 ]; then
-                info "  ⚠️  $pattern output empty (1 line), attempt $attempt/$max_retries"
+            if [ ! -s "$output" ]; then
+                info "  ⚠️  $pattern output empty (0 bytes), attempt $attempt/$max_retries"
                 attempt=$((attempt + 1))
                 continue
             fi
@@ -413,6 +421,7 @@ run_fabric() {
         else
             info "  ⚠️  $pattern failed (exit=$?), attempt $attempt/$max_retries"
             attempt=$((attempt + 1))
+            sleep $((2 ** (attempt - 1)))  # exponential backoff: 1s, 2s, 4s
         fi
     done
 
@@ -430,13 +439,19 @@ wait
 
 # ─── fabric output validation ───
 FABRIC_OK=0
+FABRIC_FAILED=0
 for f in "$PATTERNS" "$IDEAS" "$RECOMMENDATIONS" "$PRINCIPLES"; do
-    if [ -f "$f" ] && [ "$(wc -l < "$f")" -gt 1 ]; then
+    if [ -f "$f" ] && [ -s "$f" ]; then
         FABRIC_OK=$((FABRIC_OK + 1))
+    else
+        FABRIC_FAILED=$((FABRIC_FAILED + 1))
     fi
 done
 if [ "$FABRIC_OK" -eq 0 ]; then
-    info "⚠️  WARNING: All 4 fabric patterns produced empty output. Pipeline results will be low quality."
+    die "All 4 fabric patterns produced empty output. Pipeline cannot continue."
+fi
+if [ "$FABRIC_FAILED" -gt 0 ]; then
+    info "⚠️  $FABRIC_FAILED/4 fabric pattern(s) produced empty output."
 fi
 
 # ─── summary ───
