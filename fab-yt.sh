@@ -147,7 +147,7 @@ cleanup() {
     info "Cleaning up temp files..."
     rm -f "$OUTDIR"/raw*.info.json "$OUTDIR"/raw*.part "$OUTDIR"/raw*.vtt 2>/dev/null || true
 }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
 
 # ─── cookie setup ───
 # yt-dlp --cookies-from-browser auto-detects Chrome/Firefox/Brave/Edge/Opera
@@ -191,6 +191,10 @@ if [ -n "$TRANSCRIPT_FILE" ]; then
     info "Phase 1: Using provided transcript..."
     if [ "$TRANSCRIPT_FILE" = "-" ]; then
         info "Reading transcript from stdin..."
+        # Check stdin is not empty before blocking on cat
+        if [ -t 0 ]; then
+            die "--transcript - requires stdin data (pipe or redirect)"
+        fi
         TRANSCRIPT_TEXT=$(cat)
     else
         [ -f "$TRANSCRIPT_FILE" ] || die "Transcript file not found: $TRANSCRIPT_FILE"

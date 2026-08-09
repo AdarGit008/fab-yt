@@ -235,6 +235,15 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 | 1 | `youtube-transcript-api` | Python package | ❌ Often blocked |
 | 2 | `yt-dlp` + browser cookies | Logged-in browser | ❌ Needs display |
 
+## CLI Flags
+
+```
+-t, --transcript FILE  Use provided transcript (use '-' for stdin)
+-o, --output-dir DIR   Override output directory (default: ~/pi_agent/projects/pi_research)
+--dry-run              Validate setup without extracting or spending API credits
+-h, --help             Show help message
+```
+
 ## Failure Modes
 
 | Problem | Action |
