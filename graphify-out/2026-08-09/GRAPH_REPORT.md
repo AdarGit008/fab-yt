@@ -1,7 +1,7 @@
 # Graph Report - fabric_youtube  (2026-08-09)
 
 ## Corpus Check
-- 4 files · ~3,198 words
+- 4 files · ~3,214 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
