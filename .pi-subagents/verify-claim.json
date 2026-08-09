@@ -1,0 +1,41 @@
+{
+  "name": "verify-claim",
+  "description": "Verify a single concept/principle claim against 3 independent authoritative web sources. Used in fab-yt Phase 4 verification fan-out.",
+  "agent": "worker",
+  "skill": ["fab-yt"],
+  "tools": ["web_search", "fetch_content", "bash:curl"],
+  "outputSchema": {
+    "type": "object",
+    "required": ["claimId", "status", "sources"],
+    "properties": {
+      "claimId": { "type": "string", "description": "The claim identifier (e.g. Claim-1)" },
+      "status": {
+        "type": "string",
+        "enum": ["VERIFIED", "UNDECIDED", "DISCARDED"],
+        "description": "VERIFIED=3/3 corroborate, UNDECIDED=1-2/3, DISCARDED=0/3"
+      },
+      "verdict": { "type": "string", "description": "Brief reasoning for the classification" },
+      "sources": {
+        "type": "array",
+        "minItems": 3,
+        "maxItems": 3,
+        "items": {
+          "type": "object",
+          "required": ["quote", "url", "tier"],
+          "properties": {
+            "quote": { "type": "string", "description": "Exact supporting or contradicting quote" },
+            "url": { "type": "string", "description": "Source URL" },
+            "tier": {
+              "type": "string",
+              "enum": ["Tier1", "Tier2", "Tier3"],
+              "description": "Authoritative tier per fab-yt definitions"
+            }
+          }
+        }
+      }
+    }
+  },
+  "model": "anthropic/claude-sonnet-4",
+  "context": "fresh",
+  "toolBudget": { "hard": 20 }
+}

@@ -69,7 +69,28 @@ Write `consolidation.md`:
 
 ## Methodology
 Cross-referenced 4 fabric outputs: patterns, ideas, recommendations, principles.
-Ranked by: (appearance count × consensus strength). Singletons discarded.
+
+**Ranking formula:** `score = appearance_count × Σ(weight × consensus_strength)`
+
+**Consensus strength** (per output match, 0.0–1.0):
+- 1.0 = Near-identical phrasing across outputs (same core idea, same framing)
+- 0.7 = Same core idea, different framing/wording
+- 0.5 = Related concept, overlapping but distinct angle
+- 0.3 = Tangential mention, loosely connected
+- 0.0 = False match (same word, different meaning)
+
+**Source weighting:**
+| Output source | Weight | Rationale |
+|--------------|--------|-----------|
+| extract_principles | ×1.5 | Most curated, pattern-tuned output |
+| extract_patterns | ×1.5 | Recurring concepts surfaced deliberately |
+| extract_ideas | ×1.0 | Raw, unfiltered — lower signal density |
+| extract_recommendations | ×1.0 | Actionable but may be context-specific |
+
+**Scoring example:** A concept appearing in principles (1.0 match), patterns (0.7 match),
+and ideas (0.5 match) scores: 3 × (1.5×1.0 + 1.5×0.7 + 1.0×0.5) = 3 × 3.05 = 9.15
+
+Singletons (1 output only) discarded regardless of weight.
 
 ## Top Concepts by Iteration Count
 
@@ -91,10 +112,11 @@ Ranked by: (appearance count × consensus strength). Singletons discarded.
 
 Rules:
 - **Only include concepts, guidelines, principles, and mental models.** No dates, events, biographical trivia, or unactionable facts.
-- Weight extract_principles and extract_patterns higher — they're the most curated outputs.
-- A concept appearing in 2+ outputs with near-identical phrasing is stronger than one appearing in 4 with different meanings.
-- Discard anything that appears in only 1 output (singleton = noise).
+- Numeric scoring replaces ad-hoc judgment — use the ranking formula above.
+- A concept appearing in 2+ outputs with near-identical phrasing scores higher than one appearing in 4 with different meanings (consensus strength penalizes weak matches).
+- Discard anything appearing in only 1 output (singleton = noise).
 - Aim for 15-25 consolidated concepts across all tiers.
+- Sort tiers by descending score; use natural breaks in score distribution to set tier boundaries.
 
 ### Phase 3 — Claims Synthesis (LLM)
 
@@ -113,19 +135,32 @@ A single, verifiable concept/guideline/principle. Must be actionable.
 Rules:
 - **One concept/guideline/principle per claim.** Not facts, not events, not dates.
 - Each claim must be something a person could apply or act on.
+- **Structure:** claim = concept + falsifiable predicate.
+  - ❌ "Always validate assumptions" — vague, not falsifiable.
+  - ✅ "Teams that validate assumptions before project kickoff experience 30% fewer rework cycles" — testable, sourced.
+  - ✅ "Validating assumptions reduces project risk" — falsifiable (could be disproven).
 - Prioritize Tier 1 and Tier 2 concepts from consolidation.
 - Tag each claim: `[Claim-N]`
 - Aim for 10-20 claims. Quality over quantity.
 
 ### Phase 4 — Verification (Subagent Crews)
 
-**Before fanning out:** Check whether subagents have \`web_search\` and/or
-\`fetch_content\` tools available. If they don't, skip subagents entirely and
-run verification in the parent session (call \`web_search\` / \`fetch_content\`
+**Before fanning out:** Check whether subagents have `web_search` and/or
+`fetch_content` tools available. If they don't, skip subagents entirely and
+run verification in the parent session (call `web_search` / `fetch_content`
 directly per claim).
 
-Cap parallel verification at 5 subagents. If there are more than 5 claims,
-batch them into groups and verify sequentially by batch.
+**Source quality definitions:**
+
+| Term | Definition | Examples |
+|------|-----------|----------|
+| **Authoritative (Tier 1)** | Primary research, official standards, widely-cited textbooks | Peer-reviewed papers, ISO standards, NIST, academic press |
+| **Authoritative (Tier 2)** | Established industry sources, reputable journalism | Harvard Business Review, MIT Tech Review, Wired, The Verge |
+| **Authoritative (Tier 3)** | Credible blogs, conference talks, practitioner accounts | Personal blogs of recognized experts, conference recordings, whitepapers |
+| **Independent** | Sources from different organizations/authors/domains | Two .edu articles from same university ≠ independent. A .edu + .gov + .org = independent. |
+
+**Parallel fan-out limits:** Cap at 5 concurrent subagents. If there are more than 5 claims,
+batch them: verify 5 at a time, collect results, proceed to next batch.
 
 For EACH claim, run a research subagent. Use parallel fan-out for efficiency.
 
@@ -160,9 +195,9 @@ Output format:
 ```
 
 **Classification:**
-- **VERIFIED** — all 3/3 sources corroborate the concept. No contradictions.
-- **UNDECIDED** — only 1-2/3 sources corroborate, or sources are ambiguous.
-- **DISCARDED** — 0/3 sources support the concept, or all sources contradict.
+- **VERIFIED** — all 3/3 independent, authoritative (Tier 1–3) sources corroborate the concept. No contradictions.
+- **UNDECIDED** — only 1-2/3 sources corroborate, sources are ambiguous, or independence is questionable.
+- **DISCARDED** — 0/3 sources support, all sources contradict, or only Tier-3-or-below sources found.
 
 Be tough but fair. A concept is only VERIFIED when 3 independent, authoritative sources agree.
 
