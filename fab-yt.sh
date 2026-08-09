@@ -3,7 +3,7 @@ set -euo pipefail
 
 # ─── fab-yt.sh ─── YouTube transcript → fabric patterns pipeline
 # Usage: ./fab-yt.sh <youtube-url>
-# Output: transcript.md, extract_wisdom.md, extract_insights.md, extract_instructions.md
+# Output: transcript.md + 4 fabric pattern outputs (concepts/guidelines/principles focus)
 
 # ─── config ───
 FABRIC="${FABRIC:-fabric}"
@@ -25,9 +25,10 @@ OUTDIR="$OUTPUT_BASE/fab-yt-$TIMESTAMP"
 mkdir -p "$OUTDIR"
 
 TRANSCRIPT="$OUTDIR/transcript.md"
-WISDOM="$OUTDIR/extract_wisdom.md"
-INSIGHTS="$OUTDIR/extract_insights.md"
-INSTRUCTIONS="$OUTDIR/extract_instructions.md"
+PATTERNS="$OUTDIR/extract_patterns.md"
+IDEAS="$OUTDIR/extract_ideas.md"
+RECOMMENDATIONS="$OUTDIR/extract_recommendations.md"
+PRINCIPLES="$OUTDIR/extract_principles.md"
 
 info "Video ID: $VIDEO_ID"
 info "Output:   $OUTDIR"
@@ -35,6 +36,11 @@ info "Output:   $OUTDIR"
 # ═══════════════════════════════════════════
 # PHASE 1: GET TRANSCRIPT
 # ═══════════════════════════════════════════
+
+get_transcript_fabric() {
+    # fabric v1.4.459+ has built-in YouTube transcript extraction
+    "$FABRIC" --youtube "$URL" --transcript 2>/dev/null
+}
 
 get_transcript_api() {
     # youtube-transcript-api (clean text, no parsing needed)
@@ -235,12 +241,20 @@ info "Phase 1: Getting transcript..."
 
 TRANSCRIPT_TEXT=""
 
-# Attempt 1: youtube-transcript-api (fast, clean, no cookies)
-info "Trying youtube-transcript-api..."
-TRANSCRIPT_TEXT=$(get_transcript_api) && {
-    echo "$TRANSCRIPT_TEXT" | wc -l >/dev/null
-    [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via youtube-transcript-api"
+# Attempt 0: fabric built-in YouTube (v1.4.459+, uses yt-dlp internally)
+info "Trying fabric built-in YouTube transcript..."
+TRANSCRIPT_TEXT=$(get_transcript_fabric) && {
+    [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via fabric --youtube"
 } || TRANSCRIPT_TEXT=""
+
+# Attempt 1: youtube-transcript-api (fast, clean, no cookies)
+if [ -z "$TRANSCRIPT_TEXT" ]; then
+    info "fabric --youtube failed. Trying youtube-transcript-api..."
+    TRANSCRIPT_TEXT=$(get_transcript_api) && {
+        echo "$TRANSCRIPT_TEXT" | wc -l >/dev/null
+        [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via youtube-transcript-api"
+    } || TRANSCRIPT_TEXT=""
+fi
 
 # Attempt 2: yt-dlp with browser cookies
 if [ -z "$TRANSCRIPT_TEXT" ]; then
@@ -268,7 +282,7 @@ if [ -z "$TRANSCRIPT_TEXT" ]; then
     fi
 fi
 
-[ -z "$TRANSCRIPT_TEXT" ] && die "All transcript methods failed (API, yt-dlp, Playwright)."
+[ -z "$TRANSCRIPT_TEXT" ] && die "All transcript methods failed (fabric, API, yt-dlp, Playwright)."
 
 # ─── count speakers (crude heuristic: look for "Speaker:" or "[Name]:" patterns) ───
 SPEAKER_COUNT=$(echo "$TRANSCRIPT_TEXT" | grep -oP '^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?:' | sort -u | wc -l)
@@ -290,13 +304,16 @@ info "Transcript saved: $TRANSCRIPT ($(wc -l < "$TRANSCRIPT") lines)"
 # ═══════════════════════════════════════════
 # PHASE 2: FABRIC PATTERNS
 # ═══════════════════════════════════════════
+# Focus: concepts, guidelines, principles — NOT trivia/dates/events.
+# Patterns chosen to surface recurring, actionable ideas from multiple angles.
 
-info "Phase 2: Running fabric patterns..."
+info "Phase 2: Running fabric patterns (concepts/guidelines/principles focus)..."
 
 run_fabric() {
     local pattern="$1"
     local output="$2"
-    info "  → fabric -p $pattern"
+    local label="$3"
+    info "  → fabric -p $pattern ($label)"
     "$FABRIC" -p "$pattern" -o "$output" < "$TRANSCRIPT" 2>/dev/null && {
         info "  ✅ $output ($(wc -l < "$output") lines)"
     } || {
@@ -305,9 +322,10 @@ run_fabric() {
     }
 }
 
-run_fabric "extract_wisdom" "$WISDOM"
-run_fabric "extract_insights" "$INSIGHTS"
-run_fabric "extract_instructions" "$INSTRUCTIONS"
+run_fabric "extract_patterns"      "$PATTERNS"       "recurring concepts"
+run_fabric "extract_ideas"         "$IDEAS"          "all ideas"
+run_fabric "extract_recommendations" "$RECOMMENDATIONS" "actionable items"
+run_fabric "extract_principles"    "$PRINCIPLES"     "principles & guidelines"
 
 # ─── summary ───
 echo ""
@@ -315,9 +333,13 @@ echo "╔═══════════════════════�
 echo "║  fab-yt Phase 1-2 complete           ║"
 echo "╠══════════════════════════════════════╣"
 echo "║  $TRANSCRIPT"
-echo "║  $WISDOM"
-echo "║  $INSIGHTS"
-echo "║  $INSTRUCTIONS"
+echo "║  $PATTERNS"
+echo "║  $IDEAS"
+echo "║  $RECOMMENDATIONS"
+echo "║  $PRINCIPLES"
+echo "╠══════════════════════════════════════╣"
+echo "║  Next: Phase 2.5 — Consolidation     ║"
+echo "║  (LLM cross-references all 4 files)   ║"
 echo "╚══════════════════════════════════════╝"
 echo ""
 echo "OUTDIR=$OUTDIR"

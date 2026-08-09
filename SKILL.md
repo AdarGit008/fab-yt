@@ -1,64 +1,121 @@
 ---
 name: fab-yt
-description: "Extract claims from YouTube videos, verify them, and report findings. Trigger: /fab-yt <youtube-link>"
+description: "Extract concepts, guidelines, and principles from YouTube videos, verify them, and report findings. Trigger: /fab-yt <youtube-link>"
 ---
 
-# /fab-yt — YouTube → Fabric → Verified Claims
+# /fab-yt — YouTube → Fabric → Verified Concepts & Principles
 
-Extract a YouTube transcript, run it through fabric patterns, synthesize claims,
-verify each claim with web research, and report surviving claims.
+Extract a YouTube transcript, run it through fabric patterns tuned for concepts/guidelines/principles,
+cross-reference outputs to surface the most-iterated ideas, verify the top ones with web research, and report.
 
 ## Prerequisites
 
-- `fabric` CLI: `~/.local/bin/fabric` (or on PATH)
+- `fabric` CLI v1.4.459+: `~/.local/bin/fabric` (or on PATH). Includes built-in YouTube transcript extraction.
 - `yt-dlp`, `youtube-transcript-api`: auto-installed if missing
 - Playwright + Chromium: auto-installed if needed (tertiary fallback; skip with `SKIP_PLAYWRIGHT=1`)
-- A browser with YouTube login: yt-dlp auto-detects Chrome/Firefox/Brave/Edge/Opera cookies on all platforms. No manual cookie export.
+- A browser with YouTube login: yt-dlp auto-detects Chrome/Firefox/Brave/Edge/Opera cookies on all platforms.
+- Custom pattern `extract_principles` at `~/.config/fabric/patterns/extract_principles/system.md`
 
 ## Full Pipeline
 
-Run the bash script for Phase 1-2, then handle Phase 3-5 via LLM:
-
 ```
-./fab-yt.sh <youtube-url>
+YouTube URL
+     │
+     ▼
+transcript.md           ← fabric --youtube / youtube-transcript-api / yt-dlp / Playwright
+     │
+     ├── extract_patterns       → recurring concepts
+     ├── extract_ideas          → all ideas
+     ├── extract_recommendations → actionable items
+     └── extract_principles     → principles & guidelines (custom)
+     │
+     ▼
+consolidation.md         ← LLM cross-references 4 outputs, ranks by iteration count
+     │
+     ▼
+claims.md                ← Top N most-iterated concepts become claims
+     │
+     ▼
+verification.md          ← Subagent crews verify each claim (3 sources)
+     │
+     ▼
+Chat report              ← VERIFIED / UNDECIDED / DISCARDED
 ```
-
-The script writes `OUTDIR` to stdout on the last line. Capture it.
 
 ### Phase 1 & 2 — Bash (fab-yt.sh)
 
 ```
 1. Extract transcript → transcript.md
-   - youtube-transcript-api (fast, no cookies, works on residential IPs)
-   - fallback: yt-dlp with browser cookies (auto-detects Chrome/Firefox/Brave/Edge/Opera)
-   - fallback: Playwright headless Chromium (anti-detection, works on blocked VPS IPs, auto-installs)
-   - fallback: prompt user to install Firefox + log into YouTube
-2. Run 3 fabric patterns: extract_wisdom, extract_insights, extract_instructions
-3. Output: transcript.md, extract_wisdom.md, extract_insights.md, extract_instructions.md
+   - fabric --youtube (built-in, v1.4.459+)
+   - fallback: youtube-transcript-api
+   - fallback: yt-dlp with browser cookies
+   - fallback: Playwright headless Chromium
+2. Run 4 fabric patterns:
+   - extract_patterns — finds recurring concepts across the transcript
+   - extract_ideas — captures all ideas mentioned
+   - extract_recommendations — extracts actionable recommendations
+   - extract_principles — custom pattern for principles, guidelines, mental models
+3. Output: transcript.md, extract_patterns.md, extract_ideas.md, extract_recommendations.md, extract_principles.md
 ```
+
+### Phase 2.5 — Consolidation (LLM)
+
+**This is the critical new step.** Read all 4 fabric output files. Cross-reference them to find concepts, guidelines, and principles that appear across multiple outputs. The more outputs a concept appears in, the more important it is.
+
+Write `consolidation.md`:
+
+```markdown
+# Consolidated Concepts & Principles
+
+## Methodology
+Cross-referenced 4 fabric outputs: patterns, ideas, recommendations, principles.
+Ranked by: (appearance count × consensus strength). Singletons discarded.
+
+## Top Concepts by Iteration Count
+
+### 🔴 Tier 1 — 4/4 outputs (Strongest consensus)
+- **[Concept name]**: [Single sentence description]
+  - Appears in: patterns, ideas, recommendations, principles
+  - Source lines: "...", "..."
+
+### 🟠 Tier 2 — 3/4 outputs
+- **[Concept name]**: [Single sentence description]
+  - Appears in: [which 3]
+  - Source lines: "..."
+
+### 🟡 Tier 3 — 2/4 outputs
+- **[Concept name]**: [Single sentence description]
+  - Appears in: [which 2]
+  - Source lines: "..."
+```
+
+Rules:
+- **Only include concepts, guidelines, principles, and mental models.** No dates, events, biographical trivia, or unactionable facts.
+- Weight extract_principles and extract_patterns higher — they're the most curated outputs.
+- A concept appearing in 2+ outputs with near-identical phrasing is stronger than one appearing in 4 with different meanings.
+- Discard anything that appears in only 1 output (singleton = noise).
+- Aim for 15-25 consolidated concepts across all tiers.
 
 ### Phase 3 — Claims Synthesis (LLM)
 
-Read the 3 fabric output files. Synthesize into simple, atomic claims.
-Write `claims.md`:
+From the consolidated concepts, create atomic, verifiable claims. Write `claims.md`:
 
 ```markdown
 # Claims
 
 ## [Claim-1]
-Single, verifiable factual claim. One fact per claim. No opinions.
+A single, verifiable concept/guideline/principle. Must be actionable.
 
 ## [Claim-2]
 ...
 ```
 
 Rules:
-- One fact per claim. Atomic — can't be split further.
-- Drop duplicates and near-duplicates.
-- Drop opinions, predictions, subjective statements that can't be verified.
-- Drop vague/generic statements ("technology is important").
-- Aim for 20-50 claims from the 3 fabric files. Quality over quantity.
+- **One concept/guideline/principle per claim.** Not facts, not events, not dates.
+- Each claim must be something a person could apply or act on.
+- Prioritize Tier 1 and Tier 2 concepts from consolidation.
 - Tag each claim: `[Claim-N]`
+- Aim for 10-20 claims. Quality over quantity.
 
 ### Phase 4 — Verification (Subagent Crews)
 
@@ -66,9 +123,9 @@ For EACH claim, run a research subagent. Use parallel fan-out for efficiency.
 
 **Subagent task template:**
 ```
-Verify this claim against web sources. Find exactly 3 independent,
+Verify this concept/principle against web sources. Find exactly 3 independent,
 authoritative sources. For each source, provide:
-- The exact quote that supports or contradicts the claim
+- The exact quote that supports or contradicts the concept
 - The URL
 
 Claim: [claim text]
@@ -93,11 +150,11 @@ Output format:
 ```
 
 **Classification:**
-- **VERIFIED** — all 3/3 sources corroborate the claim. No contradictions.
+- **VERIFIED** — all 3/3 sources corroborate the concept. No contradictions.
 - **UNDECIDED** — only 1-2/3 sources corroborate, or sources are ambiguous.
-- **DISCARDED** — 0/3 sources support the claim, or all sources contradict.
+- **DISCARDED** — 0/3 sources support the concept, or all sources contradict.
 
-Be tough but fair. A claim is only VERIFIED when 3 independent, authoritative sources agree.
+Be tough but fair. A concept is only VERIFIED when 3 independent, authoritative sources agree.
 
 ### Phase 5 — Report
 
@@ -107,32 +164,80 @@ Write `verification.md` with all results, grouped by status:
 # Verification Report
 **Video:** [URL]
 **Date:** [date]
-**Claims analyzed:** N
+**Concepts analyzed:** N
 **VERIFIED:** V | **UNDECIDED:** U | **DISCARDED:** D
 
 ## ✅ VERIFIED
-[verified claims with sources]
+[verified concepts with sources]
 
 ## 🤔 UNDECIDED
-[undecided claims with sources]
+[undecided concepts with sources]
 
 ## ❌ DISCARDED
-[discarded claims with brief reason]
+[discarded concepts with brief reason]
 ```
 
 **Print to chat:**
 ```
 ## fab-yt Results
 
-### ✅ VERIFIED (top 5)
-- [Claim text] — [brief source note]
+### ✅ VERIFIED (all)
+- [Concept/principle] — [brief source note]
 
-### 🤔 UNDECIDED (top 5)
-- [Claim text] — [brief note on why]
+### 🤔 UNDECIDED
+- [Concept/principle] — [brief note on why]
 
-### ❌ DISCARDED (all)
-- [Claim text] — [reason]
+### ❌ DISCARDED
+- [Concept/principle] — [reason]
 ```
+
+## Output Structure
+
+```
+~/pi_agent/projects/pi_research/fab-yt-DD-MM-YYYY/
+├── transcript.md
+├── extract_patterns.md
+├── extract_ideas.md
+├── extract_recommendations.md
+├── extract_principles.md
+├── consolidation.md
+├── claims.md
+└── verification.md
+```
+
+## Verification Tiers
+
+| Tier | Sources | Meaning |
+|------|---------|---------|
+| ✅ VERIFIED | 3/3 corroborate | Concept survives |
+| 🤔 UNDECIDED | 1-2/3 corroborate | Insufficient evidence |
+| ❌ DISCARDED | 0/3 corroborate | Concept rejected |
+
+## Credits
+
+- **fabric** patterns by [Daniel Miessler](https://github.com/danielmiessler/fabric)
+- **yt-dlp** by the yt-dlp contributors
+- **youtube-transcript-api** by jdepoix
+- **Playwright** by Microsoft
+
+## Custom Pattern: extract_principles
+
+The `extract_principles` pattern is maintained in this repo at `patterns/extract_principles/system.md`.
+Install it:
+
+```bash
+mkdir -p ~/.config/fabric/patterns/extract_principles
+cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_principles/system.md
+```
+
+## Extraction Methods (tried in order)
+
+| # | Method | Requirements | Works on VPS? |
+|---|--------|-------------|---------------|
+| 0 | `fabric --youtube` | fabric v1.4.459+ | ✅ Yes |
+| 1 | `youtube-transcript-api` | Python package | ❌ Often blocked |
+| 2 | `yt-dlp` + browser cookies | Logged-in browser | ❌ Needs display |
+| 3 | **Playwright headless** | Auto-installs Chromium (~500MB) | ✅ Yes |
 
 ## Failure Modes
 
@@ -140,6 +245,7 @@ Write `verification.md` with all results, grouped by status:
 |---------|--------|
 | `fab-yt.sh` not found | Clone the repo, ensure `chmod +x fab-yt.sh` |
 | `fabric` not found | Install: `pip install fabric-ai` or check PATH |
-| Transcript blocked | Script tries: 1) youtube-transcript-api, 2) yt-dlp with browser cookies, 3) Playwright headless (auto-installs ~500MB Chromium). Set `SKIP_PLAYWRIGHT=1` to skip the Playwright fallback. |
-| Fabric pattern fails | Write a placeholder note in the output file |
-| 0 claims survive | Report honestly — the video may not contain verifiable facts |
+| `extract_principles` pattern not found | Copy from repo: `cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_principles/` |
+| Transcript blocked | Script tries: 0) fabric built-in, 1) youtube-transcript-api, 2) yt-dlp with browser cookies, 3) Playwright headless. Set `SKIP_PLAYWRIGHT=1` to skip the Playwright fallback. |
+| Fabric pattern fails | Writes a placeholder note in the output file |
+| 0 concepts survive consolidation | Report honestly — the video may not contain actionable concepts |
