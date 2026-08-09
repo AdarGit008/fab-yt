@@ -279,7 +279,7 @@ Read `verification.md` in this directory (produced by Phase 4).
 
 ## Output
 
-Write the final `verification.md` report:
+Write the final report to `report.md`:
 
 ```markdown
 # Verification Report

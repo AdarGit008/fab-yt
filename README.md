@@ -88,7 +88,8 @@ python3 chunk_transcript.py transcript.md --max-tokens 6000
 ├── prompt_report.md
 ├── consolidation.md
 ├── claims.md
-└── verification.md
+├── verification.md
+└── report.md
 ```
 
 ## Verification Tiers
