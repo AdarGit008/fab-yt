@@ -12,7 +12,6 @@ cross-reference outputs to surface the most-iterated ideas, verify the top ones 
 
 - `fabric` CLI v1.4.459+: `~/.local/bin/fabric` (or on PATH). Includes built-in YouTube transcript extraction.
 - `yt-dlp`, `youtube-transcript-api`: auto-installed if missing
-- Playwright + Chromium: auto-installed if needed (tertiary fallback; skip with `SKIP_PLAYWRIGHT=1`)
 - A browser with YouTube login: yt-dlp auto-detects Chrome/Firefox/Brave/Edge/Opera cookies on all platforms.
 - Custom pattern `extract_principles` at `~/.config/fabric/patterns/extract_principles/system.md`
 
@@ -22,7 +21,7 @@ cross-reference outputs to surface the most-iterated ideas, verify the top ones 
 YouTube URL
      │
      ▼
-transcript.md           ← fabric --youtube / youtube-transcript-api / yt-dlp / Playwright
+transcript.md           ← fabric --youtube / youtube-transcript-api / yt-dlp
      │
      ├── extract_patterns       → recurring concepts
      ├── extract_ideas          → all ideas
@@ -50,7 +49,6 @@ Chat report              ← VERIFIED / UNDECIDED / DISCARDED
    - fallback: youtube-transcript-api
    - fallback: yt-dlp with browser cookies
    - fallback: fetch_content (Pi tool — Gemini-powered)
-   - fallback: Playwright headless Chromium
    - **If all methods fail**: script outputs `TRANSCRIPT_FAILED=1` — use `fetch_content` to extract the YouTube transcript, write to `transcript.md`, re-run script with `--transcript transcript.md`
 2. Run 4 fabric patterns:
    - extract_patterns — finds recurring concepts across the transcript
@@ -222,7 +220,6 @@ Write `verification.md` with all results, grouped by status:
 - **fabric** patterns by [Daniel Miessler](https://github.com/danielmiessler/fabric)
 - **yt-dlp** by the yt-dlp contributors
 - **youtube-transcript-api** by jdepoix
-- **Playwright** by Microsoft
 
 ## Custom Pattern: extract_principles
 
@@ -242,7 +239,15 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 | 1 | `youtube-transcript-api` | Python package | ❌ Often blocked |
 | 2 | `yt-dlp` + browser cookies | Logged-in browser | ❌ Needs display |
 | 3 | **fetch_content** (Pi tool) | Pi agent with Gemini | ✅ Yes |
-| 4 | **Playwright headless** | Auto-installs Chromium (~500MB) | ✅ Yes |
+
+## CLI Flags
+
+```
+-t, --transcript FILE  Use provided transcript (use '-' for stdin)
+-o, --output-dir DIR   Override output directory (default: ~/pi_agent/projects/pi_research)
+--dry-run              Validate setup without extracting or spending API credits
+-h, --help             Show help message
+```
 
 ## Failure Modes
 
@@ -251,7 +256,7 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 | `fab-yt.sh` not found | Clone the repo, ensure `chmod +x fab-yt.sh` |
 | `fabric` not found | Install: `pip install fabric-ai` or check PATH |
 | `extract_principles` pattern not found | Copy from repo: `cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_principles/` |
-| Transcript blocked | Script tries: 0) fabric built-in, 1) youtube-transcript-api, 2) yt-dlp with browser cookies, 3) fetch_content (Pi), 4) Playwright headless. Set `SKIP_PLAYWRIGHT=1` to skip the Playwright fallback. |
+| Transcript blocked | Script tries: 0) fabric built-in, 1) youtube-transcript-api, 2) yt-dlp with browser cookies, 3) fetch_content (Pi). Use --transcript flag to provide a manually copied transcript as a workaround. |
 | All transcript methods fail | Script outputs `TRANSCRIPT_FAILED=1`. Use `fetch_content` to extract the transcript, write to `transcript.md`, re-run with `--transcript transcript.md`. Or use `--transcript -` with piped content. |
 | Subagent lacks web tools | Standard `worker` subagents only have bash/curl. Verify claims in the parent session using `web_search` / `fetch_content` directly. |
 | Fabric pattern fails | Writes a placeholder note in the output file |
