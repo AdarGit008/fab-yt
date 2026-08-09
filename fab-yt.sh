@@ -229,6 +229,16 @@ with sync_playwright() as p:
 "
 }
 
+# ─── fetch_content (Pi tool — Gemini-powered YouTube parsing) ───
+# Tried before Playwright because Playwright is slow (~500MB install) and often
+# blocked by YouTube anti-bot detection. The actual fetch_content call happens
+# in the LLM orchestrator (SKILL.md), not in bash. This function signals the need.
+get_transcript_fetch_content() {
+    info "Trying fetch_content (Gemini-powered YouTube parsing)..."
+    info "⚠️  fetch_content is a Pi tool — must be called by the LLM orchestrator."
+    return 1
+}
+
 # ─── cookie setup ───
 # yt-dlp --cookies-from-browser auto-detects Chrome/Firefox/Brave/Edge/Opera
 # on Linux, macOS, and Windows. No custom extraction needed.
@@ -308,11 +318,18 @@ else
                 [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via yt-dlp"
             } || TRANSCRIPT_TEXT=""
         else
-            info "Cookie setup failed — will try Playwright fallback."
+            info "Cookie setup failed — will try fetch_content fallback."
         fi
     fi
 
-    # Attempt 3: Playwright headless Chromium (anti-detection, works on blocked IPs)
+    # Attempt 3: fetch_content (Pi tool — Gemini-powered YouTube parsing)
+    if [ -z "$TRANSCRIPT_TEXT" ]; then
+        TRANSCRIPT_TEXT=$(get_transcript_fetch_content) && {
+            [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via fetch_content"
+        } || TRANSCRIPT_TEXT=""
+    fi
+
+    # Attempt 4: Playwright headless Chromium (anti-detection, last resort)
     if [ -z "$TRANSCRIPT_TEXT" ]; then
         if [ "${SKIP_PLAYWRIGHT:-0}" = "1" ]; then
             info "SKIP_PLAYWRIGHT=1 — skipping Playwright fallback."
@@ -326,7 +343,36 @@ else
         fi
     fi
 
-    [ -z "$TRANSCRIPT_TEXT" ] && die "All transcript methods failed (fabric, API, yt-dlp, Playwright)."
+    if [ -z "$TRANSCRIPT_TEXT" ]; then
+        info "⚠️  All transcript CLI methods failed."
+        touch "$OUTDIR/.transcript_failed"
+        {
+            echo "# Transcript extraction failed"
+            echo ""
+            echo "**Video ID:** \`$VIDEO_ID\`"
+            echo "**URL:** $URL"
+            echo ""
+            echo "All extraction methods failed. Use \`fetch_content\` to extract the transcript,"
+            echo "save it to this file, then re-run:"
+            echo "\`\`\`"
+            echo "./fab-yt.sh --transcript $TRANSCRIPT"
+            echo "\`\`\`"
+        } > "$TRANSCRIPT"
+        info "Transcript failure marker: $TRANSCRIPT"
+        echo ""
+        echo "╔══════════════════════════════════════╗"
+        echo "║  ⚠️  Transcript extraction FAILED    ║"
+        echo "╠══════════════════════════════════════╣"
+        echo "║  All methods failed.                 ║"
+        echo "║  Use fetch_content + --transcript     ║"
+        echo "╠══════════════════════════════════════╣"
+        echo "║  $TRANSCRIPT"
+        echo "╚══════════════════════════════════════╝"
+        echo ""
+        echo "OUTDIR=$OUTDIR"
+        echo "TRANSCRIPT_FAILED=1"
+        exit 0
+    fi
 fi
 
 # ─── count speakers (crude heuristic: look for "Speaker:" or "[Name]:" patterns) ───

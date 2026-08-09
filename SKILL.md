@@ -49,7 +49,9 @@ Chat report              ← VERIFIED / UNDECIDED / DISCARDED
    - fabric --youtube (built-in, v1.4.459+)
    - fallback: youtube-transcript-api
    - fallback: yt-dlp with browser cookies
+   - fallback: fetch_content (Pi tool — Gemini-powered)
    - fallback: Playwright headless Chromium
+   - **If all methods fail**: script outputs `TRANSCRIPT_FAILED=1` — use `fetch_content` to extract the YouTube transcript, write to `transcript.md`, re-run script with `--transcript transcript.md`
 2. Run 4 fabric patterns:
    - extract_patterns — finds recurring concepts across the transcript
    - extract_ideas — captures all ideas mentioned
@@ -120,6 +122,8 @@ Rules:
 ### Phase 4 — Verification (Subagent Crews)
 
 For EACH claim, run a research subagent. Use parallel fan-out for efficiency.
+
+**⚠️ Subagent tool requirement:** The subagent MUST have `web_search` and/or `fetch_content` tools available. Standard `worker` subagents only have bash/curl and cannot verify claims. Use a subagent type with web tools pre-configured, or verify claims in the parent session as a fallback.
 
 **Subagent task template:**
 ```
@@ -237,7 +241,8 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 | 0 | `fabric --youtube` | fabric v1.4.459+ | ✅ Yes |
 | 1 | `youtube-transcript-api` | Python package | ❌ Often blocked |
 | 2 | `yt-dlp` + browser cookies | Logged-in browser | ❌ Needs display |
-| 3 | **Playwright headless** | Auto-installs Chromium (~500MB) | ✅ Yes |
+| 3 | **fetch_content** (Pi tool) | Pi agent with Gemini | ✅ Yes |
+| 4 | **Playwright headless** | Auto-installs Chromium (~500MB) | ✅ Yes |
 
 ## Failure Modes
 
@@ -246,6 +251,8 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 | `fab-yt.sh` not found | Clone the repo, ensure `chmod +x fab-yt.sh` |
 | `fabric` not found | Install: `pip install fabric-ai` or check PATH |
 | `extract_principles` pattern not found | Copy from repo: `cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_principles/` |
-| Transcript blocked | Script tries: 0) fabric built-in, 1) youtube-transcript-api, 2) yt-dlp with browser cookies, 3) Playwright headless. Set `SKIP_PLAYWRIGHT=1` to skip the Playwright fallback. |
+| Transcript blocked | Script tries: 0) fabric built-in, 1) youtube-transcript-api, 2) yt-dlp with browser cookies, 3) fetch_content (Pi), 4) Playwright headless. Set `SKIP_PLAYWRIGHT=1` to skip the Playwright fallback. |
+| All transcript methods fail | Script outputs `TRANSCRIPT_FAILED=1`. Use `fetch_content` to extract the transcript, write to `transcript.md`, re-run with `--transcript transcript.md`. Or use `--transcript -` with piped content. |
+| Subagent lacks web tools | Standard `worker` subagents only have bash/curl. Verify claims in the parent session using `web_search` / `fetch_content` directly. |
 | Fabric pattern fails | Writes a placeholder note in the output file |
 | 0 concepts survive consolidation | Report honestly — the video may not contain actionable concepts |

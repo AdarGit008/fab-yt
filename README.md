@@ -10,7 +10,7 @@ Extracts transcripts from YouTube videos, runs them through [fabric](https://git
 YouTube URL
     │
     ▼
-transcript.md              ← fabric --youtube / youtube-transcript-api / yt-dlp / Playwright
+transcript.md              ← fabric --youtube / youtube-transcript-api / yt-dlp / fetch_content / Playwright
     │
     ├── extract_patterns       → recurring concepts
     ├── extract_ideas          → all ideas
@@ -41,7 +41,7 @@ The new pipeline is tuned for **concepts, guidelines, and principles** — thing
 - `fabric` CLI v1.4.459+ (by [Daniel Miessler](https://github.com/danielmiessler/fabric)) — includes built-in YouTube transcript extraction
 - `youtube-transcript-api` or `yt-dlp` (auto-installed if missing)
 - A browser with YouTube login (Chrome/Firefox/Brave/Edge/Opera — auto-detected)
-- Playwright + Chromium (auto-installed on first use as tertiary fallback; set `SKIP_PLAYWRIGHT=1` to skip)
+- Playwright + Chromium (auto-installed on first use as last resort; set `SKIP_PLAYWRIGHT=1` to skip)
 
 ## Setup
 
@@ -100,4 +100,5 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 | 0 | `fabric --youtube` | fabric v1.4.459+ | ✅ Yes |
 | 1 | `youtube-transcript-api` | Python package | ❌ Often blocked |
 | 2 | `yt-dlp` + browser cookies | Logged-in browser | ❌ Needs display |
-| 3 | **Playwright headless** | Auto-installs Chromium (~500MB) | ✅ Yes |
+| 3 | **fetch_content** (Pi tool) | Pi agent with Gemini | ✅ Yes |
+| 4 | **Playwright headless** | Auto-installs Chromium (~500MB) | ✅ Yes |
