@@ -243,9 +243,16 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 
 | Problem | Action |
 |---------|--------|
-| `fab-yt.sh` not found | Clone the repo, ensure `chmod +x fab-yt.sh` |
-| `fabric` not found | Install: `pip install fabric-ai` or check PATH |
-| `extract_principles` pattern not found | Copy from repo: `cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_principles/` |
-| Transcript blocked | Script tries: 0) fabric built-in, 1) youtube-transcript-api, 2) yt-dlp with browser cookies, 3) Playwright headless. Set `SKIP_PLAYWRIGHT=1` to skip the Playwright fallback. |
+| \`fab-yt.sh\` not found | Clone the repo, ensure \`chmod +x fab-yt.sh\` |
+| \`fabric\` not found | Install: \`pip install fabric-ai\` or check PATH |
+| \`extract_principles\` pattern not found | Copy from repo: \`cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_principles/\` |
+| Transcript blocked (all bash methods) | Orchestrator: use \`fetch_content\` tool → save output → re-run with \`--transcript\` |
 | Fabric pattern fails | Writes a placeholder note in the output file |
 | 0 concepts survive consolidation | Report honestly — the video may not contain actionable concepts |
+| Fabric API key exhausted / rate-limited | Check \`fabric --setup\` or API key config. Wait and retry. |
+| Very long transcript exceeds context window | Pre-chunk transcript with token-aware splitter before running fabric. |
+| Non-English / garbled transcript | Pipeline may produce meaningless output. Check transcript language first. |
+| Partial transcript (yt-dlp first portion) | Re-extract. Check line count proportional to video length. |
+| Subagent lacks web_search/fetch_content tools | Use parent-session verification: orchestrator calls web tools directly per claim. |
+| Disk space exhaustion | Ensure ~1GB free for output files, Playwright Chromium, and temp artifacts. |
+| Network timeout during fabric calls | Bash script has no timeout. Run with \`timeout 300 ./fab-yt.sh ...\` if needed. |

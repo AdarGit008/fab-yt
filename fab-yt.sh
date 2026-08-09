@@ -326,11 +326,38 @@ else
         fi
     fi
 
-    [ -z "$TRANSCRIPT_TEXT" ] && die "All transcript methods failed (fabric, API, yt-dlp, Playwright)."
+    if [ -z "$TRANSCRIPT_TEXT" ]; then
+        info "⚠️  All transcript CLI methods failed."
+        touch "$OUTDIR/.transcript_failed"
+        {
+            echo "# Transcript extraction failed — use fetch_content"
+            echo ""
+            echo "**Video ID:** \`$VIDEO_ID\`"
+            echo "**URL:** $URL"
+            echo ""
+            echo "All bash extraction methods failed. The LLM orchestrator should:"
+            echo ""
+            echo "1. Call \`fetch_content\` with the YouTube URL to extract the transcript"
+            echo "   (Gemini-powered YouTube parsing — works when IP is blocked)"
+            echo "2. Save the transcript to this file"
+            echo "3. Re-run: \`./fab-yt.sh --transcript $TRANSCRIPT\`"
+        } > "$TRANSCRIPT"
+        echo ""
+        echo "╔══════════════════════════════════════╗"
+        echo "║  ⚠️  Transcript extraction FAILED    ║"
+        echo "╠══════════════════════════════════════╣"
+        echo "║  All bash methods failed.            ║"
+        echo "║  Use fetch_content to extract, then:  ║"
+        echo "║  fab-yt.sh --transcript TRANSCRIPT   ║"
+        echo "╠══════════════════════════════════════╣"
+        echo "║  $TRANSCRIPT"
+        echo "╚══════════════════════════════════════╝"
+        echo ""
+        echo "OUTDIR=$OUTDIR"
+        echo "TRANSCRIPT_FAILED=1"
+        exit 1
+    fi
 fi
-
-# ─── count speakers (crude heuristic: look for "Speaker:" or "[Name]:" patterns) ───
-SPEAKER_COUNT=$(echo "$TRANSCRIPT_TEXT" | grep -oP '^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?:' | sort -u | wc -l)
 
 # ─── write transcript ───
 {
@@ -338,7 +365,6 @@ SPEAKER_COUNT=$(echo "$TRANSCRIPT_TEXT" | grep -oP '^[A-Z][a-z]+(?:\s+[A-Z][a-z]
     echo ""
     echo "**Video ID:** \`$VIDEO_ID\`  "
     echo "**Date:** $(date +%Y-%m-%d)  "
-    echo "**Speakers detected:** $SPEAKER_COUNT"
     [ -n "$TRANSCRIPT_FILE" ] && echo "**Source:** provided via --transcript"
     echo ""
     echo "---"
