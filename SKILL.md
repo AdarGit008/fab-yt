@@ -22,7 +22,7 @@ cross-reference outputs to surface the most-iterated ideas, verify the top ones 
 YouTube URL
      │
      ▼
-transcript.md           ← fabric --youtube / youtube-transcript-api / yt-dlp / Playwright
+transcript.md           ← fabric --youtube / youtube-transcript-api / yt-dlp / Playwright / fetch_content
      │
      ├── extract_patterns       → recurring concepts
      ├── extract_ideas          → all ideas
@@ -50,6 +50,10 @@ Chat report              ← VERIFIED / UNDECIDED / DISCARDED
    - fallback: youtube-transcript-api
    - fallback: yt-dlp with browser cookies
    - fallback: Playwright headless Chromium
+   - fallback: \`fetch_content\` (Pi tool — Gemini YouTube parsing)
+     If all bash methods fail (exit code 1 + \`.transcript_failed\` marker), the
+     orchestrator calls \`fetch_content\` with the URL, saves output as transcript,
+     and re-runs with \`--transcript\`
 2. Run 4 fabric patterns:
    - extract_patterns — finds recurring concepts across the transcript
    - extract_ideas — captures all ideas mentioned
@@ -118,6 +122,14 @@ Rules:
 - Aim for 10-20 claims. Quality over quantity.
 
 ### Phase 4 — Verification (Subagent Crews)
+
+**Before fanning out:** Check whether subagents have \`web_search\` and/or
+\`fetch_content\` tools available. If they don't, skip subagents entirely and
+run verification in the parent session (call \`web_search\` / \`fetch_content\`
+directly per claim).
+
+Cap parallel verification at 5 subagents. If there are more than 5 claims,
+batch them into groups and verify sequentially by batch.
 
 For EACH claim, run a research subagent. Use parallel fan-out for efficiency.
 
@@ -238,6 +250,7 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 | 1 | `youtube-transcript-api` | Python package | ❌ Often blocked |
 | 2 | `yt-dlp` + browser cookies | Logged-in browser | ❌ Needs display |
 | 3 | **Playwright headless** | Auto-installs Chromium (~500MB) | ✅ Yes |
+| 4 | \`fetch_content\` (Pi tool) | LLM orchestrator | ✅ Yes |
 
 ## Failure Modes
 
