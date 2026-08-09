@@ -10,7 +10,7 @@ Extracts transcripts from YouTube videos, runs them through [fabric](https://git
 YouTube URL
     │
     ▼
-transcript.md              ← fabric --youtube / youtube-transcript-api / yt-dlp / Playwright
+transcript.md              ← fabric --youtube / youtube-transcript-api / yt-dlp
     │
     ├── extract_patterns       → recurring concepts
     ├── extract_ideas          → all ideas
@@ -41,7 +41,6 @@ The new pipeline is tuned for **concepts, guidelines, and principles** — thing
 - `fabric` CLI v1.4.459+ (by [Daniel Miessler](https://github.com/danielmiessler/fabric)) — includes built-in YouTube transcript extraction
 - `youtube-transcript-api` or `yt-dlp` (auto-installed if missing)
 - A browser with YouTube login (Chrome/Firefox/Brave/Edge/Opera — auto-detected)
-- Playwright + Chromium (auto-installed on first use as tertiary fallback; set `SKIP_PLAYWRIGHT=1` to skip)
 
 ## Setup
 
@@ -62,6 +61,15 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 ```bash
 ./fab-yt.sh "https://www.youtube.com/watch?v=..."
 # Then follow LLM instructions for phases 2.5-5
+```
+
+### CLI Flags
+
+```
+-t, --transcript FILE  Use provided transcript (use '-' for stdin)
+-o, --output-dir DIR   Override output directory (default: ~/pi_agent/projects/pi_research)
+--dry-run              Validate setup without extracting or spending API credits
+-h, --help             Show help message
 ```
 
 ## Output Structure
@@ -91,7 +99,6 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 - **fabric** patterns by [Daniel Miessler](https://github.com/danielmiessler/fabric)
 - **yt-dlp** by the yt-dlp contributors
 - **youtube-transcript-api** by jdepoix
-- **Playwright** by Microsoft
 
 ## Extraction Methods (tried in order)
 
@@ -100,4 +107,3 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 | 0 | `fabric --youtube` | fabric v1.4.459+ | ✅ Yes |
 | 1 | `youtube-transcript-api` | Python package | ❌ Often blocked |
 | 2 | `yt-dlp` + browser cookies | Logged-in browser | ❌ Needs display |
-| 3 | **Playwright headless** | Auto-installs Chromium (~500MB) | ✅ Yes |

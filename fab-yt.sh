@@ -19,6 +19,7 @@ info() { echo "→ $1" >&2; }
 # ─── parse args ───
 TRANSCRIPT_FILE=""
 URL=""
+DRY_RUN=0
 while [ $# -gt 0 ]; do
     case "$1" in
         -t|--transcript)
@@ -26,8 +27,37 @@ while [ $# -gt 0 ]; do
             [ -z "$TRANSCRIPT_FILE" ] && die "--transcript requires a file path (or '-' for stdin)"
             shift 2
             ;;
+        -o|--output-dir)
+            OUTPUT_BASE="${2:-}"
+            [ -z "$OUTPUT_BASE" ] && die "--output-dir requires a directory path"
+            shift 2
+            ;;
+        --dry-run)
+            DRY_RUN=1
+            shift
+            ;;
+        -h|--help)
+            cat <<'HELP'
+Usage: fab-yt.sh [OPTIONS] <youtube-url>
+       fab-yt.sh --transcript <file> [youtube-url]
+
+YouTube transcript → fabric patterns pipeline.
+
+Options:
+  -t, --transcript FILE  Use provided transcript (use '-' for stdin)
+  -o, --output-dir DIR   Override output directory (default: ~/pi_agent/projects/pi_research)
+  --dry-run              Validate setup without extracting or spending API credits
+  -h, --help             Show this help message
+
+Environment:
+  FABRIC        Path to fabric CLI (default: fabric)
+  YT_DLP        Path to yt-dlp (default: yt-dlp)
+  OUTPUT_BASE   Base output directory (default: ~/pi_agent/projects/pi_research)
+HELP
+            exit 0
+            ;;
         -*)
-            die "Unknown flag: $1"
+            die "Unknown flag: $1. Use --help for usage."
             ;;
         *)
             URL="$1"
@@ -35,7 +65,9 @@ while [ $# -gt 0 ]; do
             ;;
     esac
 done
-[ -z "$TRANSCRIPT_FILE" ] && [ -z "$URL" ] && die "Usage: fab-yt.sh [--transcript <file>] <youtube-url>"
+if [ "$DRY_RUN" -eq 0 ]; then
+    [ -z "$TRANSCRIPT_FILE" ] && [ -z "$URL" ] && die "Usage: fab-yt.sh [--transcript <file>] <youtube-url>. Use --help for details."
+fi
 if [ -n "$URL" ]; then
     VIDEO_ID=$(echo "$URL" | sed -n 's/.*\(v=\|youtu\.be\/\|embed\/\)\([a-zA-Z0-9_-]\{11\}\).*/\2/p' | head -1)
     [ -z "$VIDEO_ID" ] && die "Could not extract video ID from URL: $URL"
@@ -51,7 +83,7 @@ while [ -d "$OUTPUT_BASE/fab-yt-$TIMESTAMP-$(printf '%02d' "$SERIAL")" ]; do
 done
 SERIAL_FMT=$(printf '%02d' "$SERIAL")
 OUTDIR="$OUTPUT_BASE/fab-yt-$TIMESTAMP-$SERIAL_FMT"
-mkdir -p "$OUTDIR"
+[ "$DRY_RUN" -eq 0 ] && mkdir -p "$OUTDIR"
 
 TRANSCRIPT="$OUTDIR/transcript.md"
 PATTERNS="$OUTDIR/extract_patterns.md"
@@ -110,124 +142,12 @@ get_transcript_ytdlp() {
     rm -f "$vtt_file" "$OUTDIR"/raw*.vtt
 }
 
-# ─── Playwright headless Chromium (anti-detection, no login needed) ───
-# Skip with SKIP_PLAYWRIGHT=1 to avoid the ~500MB Chromium install.
-ensure_playwright() {
-    if python3 -c "import playwright" 2>/dev/null; then
-        return 0
-    fi
-    info "Installing Playwright + Chromium (one-time, ~500MB)..."
-    pip install playwright --quiet 2>/dev/null || {
-        info "⚠️  pip install playwright failed. Try: pip install playwright"
-        return 1
-    }
-    python3 -m playwright install chromium --with-deps 2>/dev/null || {
-        info "⚠️  playwright install chromium failed. Try: python3 -m playwright install chromium"
-        return 1
-    }
-    info "✅ Playwright + Chromium installed."
-    return 0
+# ─── cleanup ───
+cleanup() {
+    info "Cleaning up temp files..."
+    rm -f "$OUTDIR"/raw*.info.json "$OUTDIR"/raw*.part "$OUTDIR"/raw*.vtt 2>/dev/null || true
 }
-
-get_transcript_playwright() {
-    # Headless Chromium → click "Show transcript" → extract text
-    python3 -c "
-from playwright.sync_api import sync_playwright
-import sys
-
-VIDEO_ID = '$VIDEO_ID'
-URL = f'https://www.youtube.com/watch?v={VIDEO_ID}'
-
-ANTI_DETECTION = '''
-    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-    window.chrome = { runtime: {}, loadTimes: function(){}, csi: function(){} };
-    Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-    Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-    const origQuery = window.navigator.permissions.query;
-    window.navigator.permissions.query = (params) => (
-        params.name === 'notifications' ?
-            Promise.resolve({state: Notification.permission}) :
-            origQuery(params)
-    );
-'''
-
-with sync_playwright() as p:
-    browser = p.chromium.launch(
-        headless=True,
-        args=[
-            '--disable-blink-features=AutomationControlled',
-            '--disable-features=IsolateOrigins,site-per-process',
-            '--no-sandbox', '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage', '--disable-accelerated-2d-canvas',
-            '--no-first-run', '--no-zygote', '--disable-gpu',
-        ]
-    )
-    ctx = browser.new_context(
-        viewport={'width': 1920, 'height': 1080},
-        user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
-    )
-    ctx.add_init_script(ANTI_DETECTION)
-    page = ctx.new_page()
-
-    try:
-        page.goto(URL, wait_until='domcontentloaded', timeout=30000)
-        page.wait_for_timeout(3000)
-
-        # Click 'Show transcript' — try multiple selector strategies
-        clicked = False
-        selectors = [
-            'button[aria-label*=\"Show transcript\" i]',
-            'button[aria-label*=\"Transcript\" i]',
-            'ytd-button-renderer:has-text(\"Transcript\") button',
-            '#primary-button button[aria-label*=\"transcript\" i]',
-        ]
-        for sel in selectors:
-            try:
-                btn = page.wait_for_selector(sel, timeout=5000)
-                if btn and btn.is_visible():
-                    btn.click()
-                    clicked = True
-                    break
-            except Exception:
-                continue
-
-        if not clicked:
-            # Fallback: '...' menu → Transcript
-            try:
-                page.click('button[aria-label=\"More actions\"]', timeout=3000)
-                page.wait_for_timeout(500)
-                page.click('tp-yt-paper-item:has-text(\"Transcript\"), ytd-menu-service-item-renderer:has-text(\"Transcript\")', timeout=3000)
-                clicked = True
-            except Exception:
-                pass
-
-        if not clicked:
-            sys.stderr.write('Playwright: transcript button not found\\n')
-            sys.exit(1)
-
-        # Wait for segments to render
-        page.wait_for_selector('ytd-transcript-segment-renderer', timeout=10000)
-        page.wait_for_timeout(1000)
-
-        segments = page.query_selector_all('ytd-transcript-segment-renderer')
-        if not segments:
-            sys.stderr.write('Playwright: no transcript segments found\\n')
-            sys.exit(1)
-
-        for seg in segments:
-            text_el = seg.query_selector('#content, .segment-text, yt-formatted-string')
-            if text_el:
-                line = text_el.inner_text().strip()
-                if line:
-                    print(line)
-
-    except Exception as e:
-        sys.stderr.write(f'Playwright error: {e}\\n')
-        sys.exit(1)
-    finally:
-        browser.close()
-"
-}
+trap cleanup EXIT
 
 # ─── cookie setup ───
 # yt-dlp --cookies-from-browser auto-detects Chrome/Firefox/Brave/Edge/Opera
@@ -242,28 +162,28 @@ setup_cookies() {
         fi
     done
 
-    # No browser with YouTube cookies. Guide user.
-    if ! command -v firefox &>/dev/null; then
-        info "Firefox not found. Installing..."
-        if command -v apt-get &>/dev/null; then
-            sudo apt-get install -y firefox 2>/dev/null || {
-                info "No sudo. Installing Firefox locally..."
-                curl -sL "https://download.mozilla.org/?product=firefox-latest&os=linux64&lang=en-US" -o /tmp/firefox.tar.xz
-                tar xJf /tmp/firefox.tar.xz -C "$HOME/.local/" 2>/dev/null
-                info "Firefox installed at $HOME/.local/firefox/firefox"
-            }
-        fi
-    fi
-
     echo "" >&2
     echo "╔══════════════════════════════════════════════════════════════╗" >&2
     echo "║  YouTube blocked us. One-time auth needed.                  ║" >&2
     echo "║                                                            ║" >&2
-    echo "║  Open Firefox, sign in to YouTube, visit any video.        ║" >&2
+    echo "║  Sign in to YouTube in any browser (Firefox/Chrome/etc).   ║" >&2
     echo "║  Then re-run. yt-dlp auto-detects cookies.                 ║" >&2
     echo "╚══════════════════════════════════════════════════════════════╝" >&2
     return 1
 }
+
+# ─── dry-run ───
+if [ "$DRY_RUN" -eq 1 ]; then
+    info "Dry run — validating setup..."
+    command -v "$FABRIC" >/dev/null 2>&1 || die "fabric not found. Install: pip install fabric-ai"
+    info "✅ fabric: $(command -v "$FABRIC")"
+    command -v "$YT_DLP" >/dev/null 2>&1 || info "⚠️  yt-dlp not found (optional, for cookie-based fallback)"
+    python3 -c "import youtube_transcript_api" 2>/dev/null && info "✅ youtube-transcript-api available" || info "⚠️  youtube-transcript-api not installed (optional)"
+    [ -n "$URL" ] && info "Would extract: $URL"
+    [ -n "$TRANSCRIPT_FILE" ] && info "Would use transcript: $TRANSCRIPT_FILE"
+    info "Dry run complete. Setup looks OK."
+    exit 0
+fi
 
 # ─── main transcript flow ───
 if [ -n "$TRANSCRIPT_FILE" ]; then
@@ -307,30 +227,11 @@ else
             TRANSCRIPT_TEXT=$(get_transcript_ytdlp) && {
                 [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via yt-dlp"
             } || TRANSCRIPT_TEXT=""
-        else
-            info "Cookie setup failed — will try Playwright fallback."
         fi
     fi
 
-    # Attempt 3: Playwright headless Chromium (anti-detection, works on blocked IPs)
-    if [ -z "$TRANSCRIPT_TEXT" ]; then
-        if [ "${SKIP_PLAYWRIGHT:-0}" = "1" ]; then
-            info "SKIP_PLAYWRIGHT=1 — skipping Playwright fallback."
-        elif ensure_playwright; then
-            info "Trying Playwright headless Chromium (anti-detection)..."
-            TRANSCRIPT_TEXT=$(get_transcript_playwright) && {
-                [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via Playwright"
-            } || TRANSCRIPT_TEXT=""
-        else
-            info "Playwright install failed — giving up."
-        fi
-    fi
-
-    [ -z "$TRANSCRIPT_TEXT" ] && die "All transcript methods failed (fabric, API, yt-dlp, Playwright)."
+    [ -z "$TRANSCRIPT_TEXT" ] && die "All transcript methods failed (fabric, API, yt-dlp)."
 fi
-
-# ─── count speakers (crude heuristic: look for "Speaker:" or "[Name]:" patterns) ───
-SPEAKER_COUNT=$(echo "$TRANSCRIPT_TEXT" | grep -oP '^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?:' | sort -u | wc -l)
 
 # ─── write transcript ───
 {
@@ -338,7 +239,6 @@ SPEAKER_COUNT=$(echo "$TRANSCRIPT_TEXT" | grep -oP '^[A-Z][a-z]+(?:\s+[A-Z][a-z]
     echo ""
     echo "**Video ID:** \`$VIDEO_ID\`  "
     echo "**Date:** $(date +%Y-%m-%d)  "
-    echo "**Speakers detected:** $SPEAKER_COUNT"
     [ -n "$TRANSCRIPT_FILE" ] && echo "**Source:** provided via --transcript"
     echo ""
     echo "---"

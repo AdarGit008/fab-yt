@@ -12,7 +12,6 @@ cross-reference outputs to surface the most-iterated ideas, verify the top ones 
 
 - `fabric` CLI v1.4.459+: `~/.local/bin/fabric` (or on PATH). Includes built-in YouTube transcript extraction.
 - `yt-dlp`, `youtube-transcript-api`: auto-installed if missing
-- Playwright + Chromium: auto-installed if needed (tertiary fallback; skip with `SKIP_PLAYWRIGHT=1`)
 - A browser with YouTube login: yt-dlp auto-detects Chrome/Firefox/Brave/Edge/Opera cookies on all platforms.
 - Custom pattern `extract_principles` at `~/.config/fabric/patterns/extract_principles/system.md`
 
@@ -22,7 +21,7 @@ cross-reference outputs to surface the most-iterated ideas, verify the top ones 
 YouTube URL
      │
      ▼
-transcript.md           ← fabric --youtube / youtube-transcript-api / yt-dlp / Playwright
+transcript.md           ← fabric --youtube / youtube-transcript-api / yt-dlp
      │
      ├── extract_patterns       → recurring concepts
      ├── extract_ideas          → all ideas
@@ -49,7 +48,6 @@ Chat report              ← VERIFIED / UNDECIDED / DISCARDED
    - fabric --youtube (built-in, v1.4.459+)
    - fallback: youtube-transcript-api
    - fallback: yt-dlp with browser cookies
-   - fallback: Playwright headless Chromium
 2. Run 4 fabric patterns:
    - extract_patterns — finds recurring concepts across the transcript
    - extract_ideas — captures all ideas mentioned
@@ -218,7 +216,6 @@ Write `verification.md` with all results, grouped by status:
 - **fabric** patterns by [Daniel Miessler](https://github.com/danielmiessler/fabric)
 - **yt-dlp** by the yt-dlp contributors
 - **youtube-transcript-api** by jdepoix
-- **Playwright** by Microsoft
 
 ## Custom Pattern: extract_principles
 
@@ -237,7 +234,6 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 | 0 | `fabric --youtube` | fabric v1.4.459+ | ✅ Yes |
 | 1 | `youtube-transcript-api` | Python package | ❌ Often blocked |
 | 2 | `yt-dlp` + browser cookies | Logged-in browser | ❌ Needs display |
-| 3 | **Playwright headless** | Auto-installs Chromium (~500MB) | ✅ Yes |
 
 ## Failure Modes
 
@@ -246,6 +242,6 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 | `fab-yt.sh` not found | Clone the repo, ensure `chmod +x fab-yt.sh` |
 | `fabric` not found | Install: `pip install fabric-ai` or check PATH |
 | `extract_principles` pattern not found | Copy from repo: `cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_principles/` |
-| Transcript blocked | Script tries: 0) fabric built-in, 1) youtube-transcript-api, 2) yt-dlp with browser cookies, 3) Playwright headless. Set `SKIP_PLAYWRIGHT=1` to skip the Playwright fallback. |
+| Transcript blocked | Script tries: 0) fabric built-in, 1) youtube-transcript-api, 2) yt-dlp with browser cookies. Use --transcript flag to provide a manually copied transcript as a workaround.
 | Fabric pattern fails | Writes a placeholder note in the output file |
 | 0 concepts survive consolidation | Report honestly — the video may not contain actionable concepts |
