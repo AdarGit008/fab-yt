@@ -347,6 +347,13 @@ SPEAKER_COUNT=$(echo "$TRANSCRIPT_TEXT" | grep -oP '^[A-Z][a-z]+(?:\s+[A-Z][a-z]
 } > "$TRANSCRIPT"
 info "Transcript saved: $TRANSCRIPT ($(wc -l < "$TRANSCRIPT") lines)"
 
+# ─── chunk detection ───
+TRANSCRIPT_CHARS=$(wc -c < "$TRANSCRIPT")
+if [ "$TRANSCRIPT_CHARS" -gt 32000 ]; then
+    info "⚠️  Transcript is large (~$(( TRANSCRIPT_CHARS / 4000 ))K tokens estimated)."
+    info "    Consider chunking before fabric: python3 chunk_transcript.py $TRANSCRIPT --max-tokens 6000"
+fi
+
 # ═══════════════════════════════════════════
 # PHASE 2: FABRIC PATTERNS
 # ═══════════════════════════════════════════

@@ -40,8 +40,11 @@ The new pipeline is tuned for **concepts, guidelines, and principles** — thing
 
 - `fabric` CLI v1.4.459+ (by [Daniel Miessler](https://github.com/danielmiessler/fabric)) — includes built-in YouTube transcript extraction
 - `youtube-transcript-api` or `yt-dlp` (auto-installed if missing)
+- `chonkie` Python package for token-aware transcript chunking: `pip install chonkie`
 - A browser with YouTube login (Chrome/Firefox/Brave/Edge/Opera — auto-detected)
 - Playwright + Chromium (auto-installed on first use as tertiary fallback; set `SKIP_PLAYWRIGHT=1` to skip)
+
+> **⚠️ English only.** This pipeline is designed for English-language transcripts. YouTube auto-captions in other languages, garbled transcripts, or multi-language videos will produce meaningless results. Check transcript language before running.
 
 ## Setup
 
@@ -60,8 +63,14 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 ### Manual (CLI)
 
 ```bash
+# Phase 1-2: Extract transcript + run fabric patterns
 ./fab-yt.sh "https://www.youtube.com/watch?v=..."
-# Then follow LLM instructions for phases 2.5-5
+
+# Phase 2.5-5: Generate LLM prompt templates
+./fab-yt-llm.sh ~/pi_agent/projects/pi_research/fab-yt-DD-MM-YYYY-NN/
+
+# Optional: Chunk long transcripts before fabric
+python3 chunk_transcript.py transcript.md --max-tokens 6000
 ```
 
 ## Output Structure
@@ -73,6 +82,10 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 ├── extract_ideas.md
 ├── extract_recommendations.md
 ├── extract_principles.md
+├── prompt_consolidation.md   ← fab-yt-llm.sh output
+├── prompt_claims.md
+├── prompt_verification.md
+├── prompt_report.md
 ├── consolidation.md
 ├── claims.md
 └── verification.md
