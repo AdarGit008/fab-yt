@@ -287,3 +287,10 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 | Transcript blocked | Script tries: 0) fabric built-in, 1) youtube-transcript-api, 2) yt-dlp with browser cookies, 3) Playwright headless. Set `SKIP_PLAYWRIGHT=1` to skip the Playwright fallback. |
 | Fabric pattern fails | Writes a placeholder note in the output file |
 | 0 concepts survive consolidation | Report honestly — the video may not contain actionable concepts |
+| Fabric API key exhausted / rate-limited | Check \`fabric --setup\` or API key config. Wait and retry. Rate limits reset hourly. |
+| Context window overflow (long transcript) | Pre-chunk transcript with token-aware splitter before running fabric. Check ~2K tokens per pattern. |
+| Garbled / non-English transcript | YouTube auto-captions may produce nonsense. Verify transcript quality before proceeding. Check language first. |
+| Partial transcript (yt-dlp truncation) | yt-dlp may only fetch first portion of long videos. Re-extract; check line count vs. video length. |
+| Disk space exhaustion | Ensure ~1GB free for Playwright Chromium (~500MB), output files, and temp artifacts. |
+| Network timeout during fabric calls | Bash script has no built-in timeout. Run with \`timeout 300 ./fab-yt.sh ...\` if network is unreliable. |
+| Subagent lacks web tools (Phase 4) | Use parent-session verification: orchestrator calls \`web_search\`/\`fetch_content\` directly per claim instead of delegating to subagents. |
