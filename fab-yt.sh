@@ -37,7 +37,7 @@ while [ $# -gt 0 ]; do
 done
 [ -z "$TRANSCRIPT_FILE" ] && [ -z "$URL" ] && die "Usage: fab-yt.sh [--transcript <file>] <youtube-url>"
 if [ -n "$URL" ]; then
-    VIDEO_ID=$(echo "$URL" | sed -n 's/.*\(v=\|youtu\.be\/\|embed\/\)\([a-zA-Z0-9_-]\{11\}\).*/\2/p' | head -1)
+    VIDEO_ID=$(echo "$URL" | sed -n 's/.*\(v=\|youtu\.be\/\|embed\/\|shorts\/\|live\/\)\([a-zA-Z0-9_-]\{11\}\).*/\2/p' | head -1)
     [ -z "$VIDEO_ID" ] && die "Could not extract video ID from URL: $URL"
 else
     VIDEO_ID="manual"
@@ -98,8 +98,8 @@ get_transcript_ytdlp() {
     # Clean VTT: strip timestamps, tags, blank lines, dedupe adjacent
     awk '
     /^WEBVTT/ {next} /^Kind:/ {next} /^Language:/ {next}
-    /^[0-9][0-9]:[0-9][0-9]:/ {next}
-    /<[0-9][0-9]:/ {next}
+    /^[0-9][0-9]?:[0-9][0-9]:/ {next}
+    /<[0-9][0-9]?:/ {next}
     /<c>/ {next}
     /^align/ {next} /^position/ {next}
     /^[[:space:]]*$/ {next}
@@ -229,16 +229,6 @@ with sync_playwright() as p:
 "
 }
 
-# ─── fetch_content (Pi tool — Gemini-powered YouTube parsing) ───
-# Tried before Playwright because Playwright is slow (~500MB install) and often
-# blocked by YouTube anti-bot detection. The actual fetch_content call happens
-# in the LLM orchestrator (SKILL.md), not in bash. This function signals the need.
-get_transcript_fetch_content() {
-    info "Trying fetch_content (Gemini-powered YouTube parsing)..."
-    info "⚠️  fetch_content is a Pi tool — must be called by the LLM orchestrator."
-    return 1
-}
-
 # ─── cookie setup ───
 # yt-dlp --cookies-from-browser auto-detects Chrome/Firefox/Brave/Edge/Opera
 # on Linux, macOS, and Windows. No custom extraction needed.
@@ -318,18 +308,11 @@ else
                 [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via yt-dlp"
             } || TRANSCRIPT_TEXT=""
         else
-            info "Cookie setup failed — will try fetch_content fallback."
+            info "Cookie setup failed — will try Playwright fallback."
         fi
     fi
 
-    # Attempt 3: fetch_content (Pi tool — Gemini-powered YouTube parsing)
-    if [ -z "$TRANSCRIPT_TEXT" ]; then
-        TRANSCRIPT_TEXT=$(get_transcript_fetch_content) && {
-            [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via fetch_content"
-        } || TRANSCRIPT_TEXT=""
-    fi
-
-    # Attempt 4: Playwright headless Chromium (anti-detection, last resort)
+    # Attempt 3: Playwright headless Chromium (anti-detection, last resort)
     if [ -z "$TRANSCRIPT_TEXT" ]; then
         if [ "${SKIP_PLAYWRIGHT:-0}" = "1" ]; then
             info "SKIP_PLAYWRIGHT=1 — skipping Playwright fallback."
@@ -371,7 +354,7 @@ else
         echo ""
         echo "OUTDIR=$OUTDIR"
         echo "TRANSCRIPT_FAILED=1"
-        exit 0
+        exit 1
     fi
 fi
 
@@ -405,19 +388,56 @@ run_fabric() {
     local pattern="$1"
     local output="$2"
     local label="$3"
-    info "  → fabric -p $pattern ($label)"
-    "$FABRIC" -p "$pattern" -o "$output" < "$TRANSCRIPT" 2>/dev/null && {
-        info "  ✅ $output ($(wc -l < "$output") lines)"
-    } || {
-        echo "# $pattern failed" > "$output"
-        info "  ⚠️  $pattern failed, wrote placeholder"
-    }
+    local max_retries=3
+    local attempt=1
+
+    # Timeout based on transcript size (~2s per 1K chars, min 30s, max 300s)
+    local transcript_chars
+    transcript_chars=$(wc -c < "$TRANSCRIPT")
+    local timeout_sec=$(( transcript_chars / 500 ))
+    [ "$timeout_sec" -lt 30 ] && timeout_sec=30
+    [ "$timeout_sec" -gt 300 ] && timeout_sec=300
+
+    while [ $attempt -le $max_retries ]; do
+        info "  → fabric -p $pattern ($label) [attempt $attempt/$max_retries, timeout ${timeout_sec}s]"
+        if timeout "$timeout_sec" "$FABRIC" -p "$pattern" -o "$output" < "$TRANSCRIPT" 2>/dev/null; then
+            local lines
+            lines=$(wc -l < "$output")
+            if [ "$lines" -le 1 ]; then
+                info "  ⚠️  $pattern output empty (1 line), attempt $attempt/$max_retries"
+                attempt=$((attempt + 1))
+                continue
+            fi
+            info "  ✅ $output ($lines lines)"
+            return 0
+        else
+            info "  ⚠️  $pattern failed (exit=$?), attempt $attempt/$max_retries"
+            attempt=$((attempt + 1))
+        fi
+    done
+
+    # All retries exhausted
+    echo "# $pattern failed after $max_retries attempts" > "$output"
+    info "  ❌ $pattern failed after $max_retries attempts, wrote placeholder"
+    return 1
 }
 
-run_fabric "extract_patterns"      "$PATTERNS"       "recurring concepts"
-run_fabric "extract_ideas"         "$IDEAS"          "all ideas"
-run_fabric "extract_recommendations" "$RECOMMENDATIONS" "actionable items"
-run_fabric "extract_principles"    "$PRINCIPLES"     "principles & guidelines"
+run_fabric "extract_patterns"      "$PATTERNS"       "recurring concepts" &
+run_fabric "extract_ideas"         "$IDEAS"          "all ideas" &
+run_fabric "extract_recommendations" "$RECOMMENDATIONS" "actionable items" &
+run_fabric "extract_principles"    "$PRINCIPLES"     "principles & guidelines" &
+wait
+
+# ─── fabric output validation ───
+FABRIC_OK=0
+for f in "$PATTERNS" "$IDEAS" "$RECOMMENDATIONS" "$PRINCIPLES"; do
+    if [ -f "$f" ] && [ "$(wc -l < "$f")" -gt 1 ]; then
+        FABRIC_OK=$((FABRIC_OK + 1))
+    fi
+done
+if [ "$FABRIC_OK" -eq 0 ]; then
+    info "⚠️  WARNING: All 4 fabric patterns produced empty output. Pipeline results will be low quality."
+fi
 
 # ─── summary ───
 echo ""
