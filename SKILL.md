@@ -119,6 +119,14 @@ Rules:
 
 ### Phase 4 — Verification (Subagent Crews)
 
+**Before fanning out:** Check whether subagents have \`web_search\` and/or
+\`fetch_content\` tools available. If they don't, skip subagents entirely and
+run verification in the parent session (call \`web_search\` / \`fetch_content\`
+directly per claim).
+
+Cap parallel verification at 5 subagents. If there are more than 5 claims,
+batch them into groups and verify sequentially by batch.
+
 For EACH claim, run a research subagent. Use parallel fan-out for efficiency.
 
 **⚠️ Subagent tool requirement:** The subagent MUST have `web_search` and/or `fetch_content` tools available. Standard `worker` subagents only have bash/curl and cannot verify claims. Use a subagent type with web tools pre-configured, or verify claims in the parent session as a fallback.
@@ -256,8 +264,13 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 | `fab-yt.sh` not found | Clone the repo, ensure `chmod +x fab-yt.sh` |
 | `fabric` not found | Install: `pip install fabric-ai` or check PATH |
 | `extract_principles` pattern not found | Copy from repo: `cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_principles/` |
-| Transcript blocked | Script tries: 0) fabric built-in, 1) youtube-transcript-api, 2) yt-dlp with browser cookies, 3) fetch_content (Pi). Use --transcript flag to provide a manually copied transcript as a workaround. |
-| All transcript methods fail | Script outputs `TRANSCRIPT_FAILED=1`. Use `fetch_content` to extract the transcript, write to `transcript.md`, re-run with `--transcript transcript.md`. Or use `--transcript -` with piped content. |
-| Subagent lacks web tools | Standard `worker` subagents only have bash/curl. Verify claims in the parent session using `web_search` / `fetch_content` directly. |
+| Transcript blocked (all bash methods) | Script tries: 0) fabric built-in, 1) youtube-transcript-api, 2) yt-dlp with browser cookies, 3) fetch_content (Pi). Use --transcript flag as workaround. |
 | Fabric pattern fails | Writes a placeholder note in the output file |
 | 0 concepts survive consolidation | Report honestly — the video may not contain actionable concepts |
+| Fabric API key exhausted / rate-limited | Check `fabric --setup` or API key config. Wait and retry. |
+| Very long transcript exceeds context window | Pre-chunk transcript with token-aware splitter before running fabric. |
+| Non-English / garbled transcript | Pipeline may produce meaningless output. Check transcript language first. |
+| Partial transcript (yt-dlp first portion) | Re-extract. Check line count proportional to video length. |
+| Subagent lacks web_search/fetch_content tools | Use parent-session verification: orchestrator calls web tools directly per claim. |
+| Disk space exhaustion | Ensure ~1GB free for output files and temp artifacts. |
+| Network timeout during fabric calls | Bash script has no timeout. Run with `timeout 300 ./fab-yt.sh ...` if needed. |
