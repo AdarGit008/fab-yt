@@ -67,7 +67,7 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 ## Output Structure
 
 ```
-~/pi_agent/projects/pi_research/fab-yt-DD-MM-YYYY/
+~/pi_agent/projects/pi_research/fab-yt-DD-MM-YYYY-NN/
 ├── transcript.md
 ├── extract_patterns.md
 ├── extract_ideas.md

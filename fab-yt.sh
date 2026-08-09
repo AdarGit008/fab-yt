@@ -21,7 +21,12 @@ VIDEO_ID=$(echo "$URL" | sed -n 's/.*\(v=\|youtu\.be\/\|embed\/\)\([a-zA-Z0-9_-]
 [ -z "$VIDEO_ID" ] && die "Could not extract video ID from URL: $URL"
 
 TIMESTAMP=$(date +%d-%m-%Y)
-OUTDIR="$OUTPUT_BASE/fab-yt-$TIMESTAMP"
+SERIAL=1
+while [ -d "$OUTPUT_BASE/fab-yt-$TIMESTAMP-$(printf '%02d' "$SERIAL")" ]; do
+    SERIAL=$((SERIAL + 1))
+done
+SERIAL_FMT=$(printf '%02d' "$SERIAL")
+OUTDIR="$OUTPUT_BASE/fab-yt-$TIMESTAMP-$SERIAL_FMT"
 mkdir -p "$OUTDIR"
 
 TRANSCRIPT="$OUTDIR/transcript.md"
