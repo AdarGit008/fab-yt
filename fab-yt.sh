@@ -2,7 +2,9 @@
 set -euo pipefail
 
 # ─── fab-yt.sh ─── YouTube transcript → fabric patterns pipeline
-# Usage: ./fab-yt.sh <youtube-url>
+# Usage: ./fab-yt.sh [--transcript <file>] <youtube-url>
+#        ./fab-yt.sh --transcript - <youtube-url>   (stdin)
+#        ./fab-yt.sh --transcript file.md            (URL optional)
 # Output: transcript.md + 4 fabric pattern outputs (concepts/guidelines/principles focus)
 
 # ─── config ───
@@ -15,10 +17,32 @@ die() { echo "❌ $1" >&2; exit 1; }
 info() { echo "→ $1" >&2; }
 
 # ─── parse args ───
-URL="${1:-}"
-[ -z "$URL" ] && die "Usage: fab-yt.sh <youtube-url>"
-VIDEO_ID=$(echo "$URL" | sed -n 's/.*\(v=\|youtu\.be\/\|embed\/\)\([a-zA-Z0-9_-]\{11\}\).*/\2/p' | head -1)
-[ -z "$VIDEO_ID" ] && die "Could not extract video ID from URL: $URL"
+TRANSCRIPT_FILE=""
+URL=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -t|--transcript)
+            TRANSCRIPT_FILE="${2:-}"
+            [ -z "$TRANSCRIPT_FILE" ] && die "--transcript requires a file path (or '-' for stdin)"
+            shift 2
+            ;;
+        -*)
+            die "Unknown flag: $1"
+            ;;
+        *)
+            URL="$1"
+            shift
+            ;;
+    esac
+done
+[ -z "$TRANSCRIPT_FILE" ] && [ -z "$URL" ] && die "Usage: fab-yt.sh [--transcript <file>] <youtube-url>"
+if [ -n "$URL" ]; then
+    VIDEO_ID=$(echo "$URL" | sed -n 's/.*\(v=\|youtu\.be\/\|embed\/\)\([a-zA-Z0-9_-]\{11\}\).*/\2/p' | head -1)
+    [ -z "$VIDEO_ID" ] && die "Could not extract video ID from URL: $URL"
+else
+    VIDEO_ID="manual"
+    URL="(transcript provided manually)"
+fi
 
 TIMESTAMP=$(date +%d-%m-%Y)
 SERIAL=1
@@ -242,52 +266,68 @@ setup_cookies() {
 }
 
 # ─── main transcript flow ───
-info "Phase 1: Getting transcript..."
+if [ -n "$TRANSCRIPT_FILE" ]; then
+    # ─── Phase 1 (skip): Use provided transcript ───
+    info "Phase 1: Using provided transcript..."
+    if [ "$TRANSCRIPT_FILE" = "-" ]; then
+        info "Reading transcript from stdin..."
+        TRANSCRIPT_TEXT=$(cat)
+    else
+        [ -f "$TRANSCRIPT_FILE" ] || die "Transcript file not found: $TRANSCRIPT_FILE"
+        info "Reading transcript: $TRANSCRIPT_FILE"
+        TRANSCRIPT_TEXT=$(cat "$TRANSCRIPT_FILE")
+    fi
+    [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] || die "Provided transcript is empty."
+    info "✅ Got transcript via --transcript"
+else
+    # ─── Phase 1: Extract transcript ───
+    info "Phase 1: Getting transcript..."
 
-TRANSCRIPT_TEXT=""
+    TRANSCRIPT_TEXT=""
 
-# Attempt 0: fabric built-in YouTube (v1.4.459+, uses yt-dlp internally)
-info "Trying fabric built-in YouTube transcript..."
-TRANSCRIPT_TEXT=$(get_transcript_fabric) && {
-    [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via fabric --youtube"
-} || TRANSCRIPT_TEXT=""
-
-# Attempt 1: youtube-transcript-api (fast, clean, no cookies)
-if [ -z "$TRANSCRIPT_TEXT" ]; then
-    info "fabric --youtube failed. Trying youtube-transcript-api..."
-    TRANSCRIPT_TEXT=$(get_transcript_api) && {
-        echo "$TRANSCRIPT_TEXT" | wc -l >/dev/null
-        [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via youtube-transcript-api"
+    # Attempt 0: fabric built-in YouTube (v1.4.459+, uses yt-dlp internally)
+    info "Trying fabric built-in YouTube transcript..."
+    TRANSCRIPT_TEXT=$(get_transcript_fabric) && {
+        [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via fabric --youtube"
     } || TRANSCRIPT_TEXT=""
-fi
 
-# Attempt 2: yt-dlp with browser cookies
-if [ -z "$TRANSCRIPT_TEXT" ]; then
-    info "youtube-transcript-api failed. Trying yt-dlp with cookies..."
-    if setup_cookies; then
-        TRANSCRIPT_TEXT=$(get_transcript_ytdlp) && {
-            [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via yt-dlp"
+    # Attempt 1: youtube-transcript-api (fast, clean, no cookies)
+    if [ -z "$TRANSCRIPT_TEXT" ]; then
+        info "fabric --youtube failed. Trying youtube-transcript-api..."
+        TRANSCRIPT_TEXT=$(get_transcript_api) && {
+            echo "$TRANSCRIPT_TEXT" | wc -l >/dev/null
+            [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via youtube-transcript-api"
         } || TRANSCRIPT_TEXT=""
-    else
-        info "Cookie setup failed — will try Playwright fallback."
     fi
-fi
 
-# Attempt 3: Playwright headless Chromium (anti-detection, works on blocked IPs)
-if [ -z "$TRANSCRIPT_TEXT" ]; then
-    if [ "${SKIP_PLAYWRIGHT:-0}" = "1" ]; then
-        info "SKIP_PLAYWRIGHT=1 — skipping Playwright fallback."
-    elif ensure_playwright; then
-        info "Trying Playwright headless Chromium (anti-detection)..."
-        TRANSCRIPT_TEXT=$(get_transcript_playwright) && {
-            [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via Playwright"
-        } || TRANSCRIPT_TEXT=""
-    else
-        info "Playwright install failed — giving up."
+    # Attempt 2: yt-dlp with browser cookies
+    if [ -z "$TRANSCRIPT_TEXT" ]; then
+        info "youtube-transcript-api failed. Trying yt-dlp with cookies..."
+        if setup_cookies; then
+            TRANSCRIPT_TEXT=$(get_transcript_ytdlp) && {
+                [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via yt-dlp"
+            } || TRANSCRIPT_TEXT=""
+        else
+            info "Cookie setup failed — will try Playwright fallback."
+        fi
     fi
-fi
 
-[ -z "$TRANSCRIPT_TEXT" ] && die "All transcript methods failed (fabric, API, yt-dlp, Playwright)."
+    # Attempt 3: Playwright headless Chromium (anti-detection, works on blocked IPs)
+    if [ -z "$TRANSCRIPT_TEXT" ]; then
+        if [ "${SKIP_PLAYWRIGHT:-0}" = "1" ]; then
+            info "SKIP_PLAYWRIGHT=1 — skipping Playwright fallback."
+        elif ensure_playwright; then
+            info "Trying Playwright headless Chromium (anti-detection)..."
+            TRANSCRIPT_TEXT=$(get_transcript_playwright) && {
+                [ -n "$(echo "$TRANSCRIPT_TEXT" | tr -d '[:space:]')" ] && info "✅ Got transcript via Playwright"
+            } || TRANSCRIPT_TEXT=""
+        else
+            info "Playwright install failed — giving up."
+        fi
+    fi
+
+    [ -z "$TRANSCRIPT_TEXT" ] && die "All transcript methods failed (fabric, API, yt-dlp, Playwright)."
+fi
 
 # ─── count speakers (crude heuristic: look for "Speaker:" or "[Name]:" patterns) ───
 SPEAKER_COUNT=$(echo "$TRANSCRIPT_TEXT" | grep -oP '^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?:' | sort -u | wc -l)
@@ -299,6 +339,7 @@ SPEAKER_COUNT=$(echo "$TRANSCRIPT_TEXT" | grep -oP '^[A-Z][a-z]+(?:\s+[A-Z][a-z]
     echo "**Video ID:** \`$VIDEO_ID\`  "
     echo "**Date:** $(date +%Y-%m-%d)  "
     echo "**Speakers detected:** $SPEAKER_COUNT"
+    [ -n "$TRANSCRIPT_FILE" ] && echo "**Source:** provided via --transcript"
     echo ""
     echo "---"
     echo ""
