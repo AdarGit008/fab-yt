@@ -21,7 +21,7 @@ cross-reference outputs to surface the most-iterated ideas, verify the top ones 
 YouTube URL
      │
      ▼
-transcript.md           ← fabric --youtube / youtube-transcript-api / yt-dlp
+transcript.md           ← fabric --youtube / smry.ai / youtube-transcript-api / yt-dlp
      │
      ├── extract_patterns       → recurring concepts
      ├── extract_ideas          → all ideas
@@ -48,8 +48,9 @@ Chat report              ← VERIFIED / UNDECIDED / DISCARDED
    - fabric --youtube (built-in, v1.4.459+)
    - fallback: youtube-transcript-api
    - fallback: yt-dlp with browser cookies
+   - fallback: smry.ai — prepend `https://smry.ai/` to YouTube URL, fetch with Pi `fetch_content` tool (readable mode)
    - fallback: fetch_content (Pi tool — Gemini-powered)
-   - **If all methods fail**: script outputs `TRANSCRIPT_FAILED=1` — use `fetch_content` to extract the YouTube transcript, write to `transcript.md`, re-run script with `--transcript transcript.md`
+   - **If all methods fail**: script outputs `TRANSCRIPT_FAILED=1` — use `fetch_content` with `https://smry.ai/youtube.com/watch?v=VIDEO_ID`, write to `transcript.md`, re-run script with `--transcript transcript.md`
 2. Run 4 fabric patterns:
    - extract_patterns — finds recurring concepts across the transcript
    - extract_ideas — captures all ideas mentioned
@@ -281,7 +282,8 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 | 0 | `fabric --youtube` | fabric v1.4.459+ | ✅ Yes |
 | 1 | `youtube-transcript-api` | Python package | ❌ Often blocked |
 | 2 | `yt-dlp` + browser cookies | Logged-in browser | ❌ Needs display |
-| 3 | **fetch_content** (Pi tool) | Pi agent with Gemini | ✅ Yes |
+| 3 | **smry.ai** (prepend to URL) | Pi `fetch_content` tool | ✅ Yes |
+| 4 | **fetch_content** (Pi tool) | Pi agent with Gemini | ✅ Yes |
 
 ## CLI Flags
 
@@ -299,7 +301,7 @@ cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_princ
 | `fab-yt.sh` not found | Clone the repo, ensure `chmod +x fab-yt.sh` |
 | `fabric` not found | Install: `pip install fabric-ai` or check PATH |
 | `extract_principles` pattern not found | Copy from repo: `cp patterns/extract_principles/system.md ~/.config/fabric/patterns/extract_principles/` |
-| Transcript blocked (all bash methods) | Script tries: 0) fabric built-in, 1) youtube-transcript-api, 2) yt-dlp with browser cookies, 3) fetch_content (Pi). Use --transcript flag as workaround. |
+| Transcript blocked (all bash methods) | Script tries: 0) fabric built-in, 1) youtube-transcript-api, 2) yt-dlp with browser cookies, 3) smry.ai via fetch_content, 4) fetch_content (Gemini). Use --transcript flag as workaround. |
 | Fabric pattern fails | Writes a placeholder note in the output file |
 | 0 concepts survive consolidation | Report honestly — the video may not contain actionable concepts |
 | Fabric API key exhausted / rate-limited | Check `fabric --setup` or API key config. Wait and retry. |
